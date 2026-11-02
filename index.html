@@ -1,0 +1,2417 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Radar Jurel Centro-Sur</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Carta náutica: mapa a la izquierda, panel de decisión a la derecha; en teléfono se apilan. */
+:root {
+  --paper: #eef2f3;
+  --panel: #ffffff;
+  --ink: #12263a;
+  --muted: #5b6b78;
+  --line: #cfd8dd;
+  --sea: #dce8ee;
+  --land: #e6e1d3;
+  --coast: #6f6450;
+  --accent: #c8502a;
+  --good: #2f8a5a;
+  --warn: #b7791f;
+  --bad: #b23a3a;
+  --chip-good: #e3f2ea;
+  --chip-warn: #fbf0d9;
+  --chip-bad: #f7e1e1;
+  --f-display: "Saira Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --f-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "Consolas", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0d1720; --panel: #13212d; --ink: #e3ecf1; --muted: #93a6b4; --line: #26394a;
+    --sea: #0f2433; --land: #2a2a25; --coast: #9c8f73; --accent: #ec7a4f;
+    --good: #5cc28c; --warn: #e3b04b; --bad: #ec7b7b;
+    --chip-good: #183a2a; --chip-warn: #3a3017; --chip-bad: #3d1d1d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0d1720; --panel: #13212d; --ink: #e3ecf1; --muted: #93a6b4; --line: #26394a;
+  --sea: #0f2433; --land: #2a2a25; --coast: #9c8f73; --accent: #ec7a4f;
+  --good: #5cc28c; --warn: #e3b04b; --bad: #ec7b7b;
+  --chip-good: #183a2a; --chip-warn: #3a3017; --chip-bad: #3d1d1d;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  background: var(--paper); color: var(--ink); font: 15px/1.45 var(--f-body);
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.wrap {
+  max-width: 1360px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px 32px;
+  display: grid; gap: 16px;
+}
+header.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+h1 { font: 700 32px/1 var(--f-display); letter-spacing: .01em; margin: 0; text-wrap: balance; }
+h1 span { color: var(--accent); }
+h2 { font: 600 20px/1.1 var(--f-display); letter-spacing: .02em; margin: 0 0 8px; text-transform: uppercase; }
+h3 { font: 600 15px/1.2 var(--f-display); letter-spacing: .03em; margin: 12px 0 6px; text-transform: uppercase; color: var(--muted); }
+.sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); display: inline-block; flex: none; }
+.dot.ok { background: var(--good); } .dot.err { background: var(--bad); } .dot.old { background: var(--warn); }
+.dot.load { background: var(--warn); animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .dot.load { animation: none; } }
+button, select, input { font: inherit; color: inherit; }
+.btn {
+  border: 1px solid var(--ink); background: var(--ink); color: var(--panel); border-radius: 6px;
+  padding: 7px 14px; font-weight: 600; cursor: pointer;
+}
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+.btn.small { padding: 4px 10px; font-size: 13px; }
+.btn:focus-visible, .day:focus-visible, select:focus-visible, input:focus-visible, .layer:focus-visible, tr.pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn:disabled { opacity: .5; cursor: wait; }
+
+.days { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
+.day {
+  border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 8px 8px 7px;
+  text-align: left; cursor: pointer; display: grid; gap: 4px; min-width: 0;
+}
+.day[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.day .dn { font: 600 16px/1 var(--f-display); letter-spacing: .02em; }
+.day .bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.day .bar i { display: block; height: 100%; background: var(--accent); }
+.day .sc { font: 600 13px/1 var(--f-mono); font-variant-numeric: tabular-nums; }
+.day .best { font-size: 11px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .06em; min-height: 13px; }
+@media (max-width: 720px) { .days { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+.chip { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px; letter-spacing: .03em; white-space: nowrap; }
+.chip.g { background: var(--chip-good); color: var(--good); }
+.chip.w { background: var(--chip-warn); color: var(--warn); }
+.chip.b { background: var(--chip-bad); color: var(--bad); }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 1040px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.col { display: grid; gap: 16px; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
+.mapcard { padding: 10px; }
+.layers { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.layer { border: 1px solid var(--line); background: transparent; border-radius: 6px; padding: 4px 9px; cursor: pointer; font-size: 12.5px; }
+.layer[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.layer:disabled { opacity: .4; cursor: not-allowed; }
+.mapbox { position: relative; width: 100%; max-width: 100%; }
+canvas#map { width: 100%; display: block; border-radius: 6px; touch-action: manipulation; cursor: crosshair; }
+.legend { display: flex; align-items: center; gap: 8px; font: 12px var(--f-mono); color: var(--muted); margin-top: 8px; flex-wrap: wrap; }
+.legend canvas { height: 10px; width: 180px; max-width: 50vw; border-radius: 2px; }
+.tip {
+  position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 6px; padding: 8px 10px; font-size: 12.5px; box-shadow: 0 4px 14px rgba(0,0,0,.15);
+  width: 270px; max-width: 90%; z-index: 5;
+}
+.tip b { font-family: var(--f-mono); }
+.tip .comps { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 6px; margin-top: 6px; align-items: center; }
+.tip .comps i { display: block; height: 5px; background: var(--accent); border-radius: 2px; }
+.tip .comps span { color: var(--muted); }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+.verdict { font-size: 15px; line-height: 1.5; }
+.verdict strong { color: var(--accent); }
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-weight: 600; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 6px 5px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 7px 5px; border-bottom: 1px solid var(--line); white-space: nowrap; font-variant-numeric: tabular-nums; }
+tr.pick { cursor: pointer; } tr.pick:hover td { background: var(--sea); }
+td.rank { font: 700 15px var(--f-display); color: var(--accent); }
+.scorebar { display: inline-block; width: 40px; height: 6px; background: var(--line); border-radius: 3px; vertical-align: middle; margin-right: 6px; overflow: hidden; }
+.scorebar i { display: block; height: 100%; background: var(--accent); }
+
+.row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 1040px) { .row2 { grid-template-columns: minmax(0, 1fr); } }
+.cui svg { width: 100%; height: auto; display: block; }
+.cui text { font: 11px var(--f-mono); fill: var(--muted); }
+.ctrl { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; }
+.ctrl label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+.ctrl input[type=number] { width: 74px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--paper); }
+.ctrl select, .ctrl input[type=password] { padding: 5px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--paper); }
+.pesos { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 12px; }
+.pesos label { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); }
+.pesos input { width: 58px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--paper); }
+.note { color: var(--muted); font-size: 12.5px; max-width: 78ch; }
+.err { border-color: var(--bad); color: var(--bad); }
+details summary { cursor: pointer; font-weight: 600; }
+.fuentes { display: grid; gap: 6px; font-size: 13px; }
+.fuentes div { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: baseline; }
+.fuentes .dt { color: var(--muted); font-family: var(--f-mono); font-size: 12px; white-space: nowrap; }
+.fuentes small { grid-column: 2 / 4; color: var(--muted); }
+.comp-list { display: grid; gap: 4px; margin: 6px 0 0; padding: 0; list-style: none; font-size: 13px; }
+.comp-list b { font-weight: 600; }
+
+/* pestañas */
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--line); min-width: 0; }
+@media (max-width: 640px) { .tab { padding: 7px 9px; font-size: 13.5px; } }
+.tab {
+  border: 1px solid transparent; border-bottom: none; background: transparent; padding: 8px 16px; cursor: pointer;
+  font: 600 16px/1 var(--f-display); letter-spacing: .03em; text-transform: uppercase; color: var(--muted);
+  border-radius: 8px 8px 0 0; margin-bottom: -1px;
+}
+.tab[aria-selected="true"] { background: var(--panel); border-color: var(--line); color: var(--ink); }
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.vista { display: grid; gap: 16px; min-width: 0; }
+
+/* zona de búsqueda */
+.zona-top { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+.zona-top h2 { margin: 0; }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.zona-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 16px; margin-top: 10px; align-items: start; }
+@media (max-width: 1040px) { .zona-grid { grid-template-columns: minmax(0, 1fr); } }
+tr.activa td { background: var(--sea); font-weight: 600; }
+.zona-actual { font-size: 13px; color: var(--muted); }
+.zona-actual b { color: var(--ink); }
+
+/* glosario */
+.guia { display: grid; gap: 16px; }
+.guia .card p, .guia .card li { max-width: 80ch; }
+.guia ol, .guia ul { margin: 6px 0 0; padding-left: 22px; display: grid; gap: 5px; }
+.guia table td { white-space: normal; vertical-align: top; }
+.guia table td:first-child { font-weight: 600; white-space: nowrap; }
+.gl-buscar { padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); width: min(360px, 100%); }
+dl.glos { display: grid; grid-template-columns: minmax(150px, 220px) minmax(0, 1fr); gap: 0; margin: 10px 0 0; }
+dl.glos dt, dl.glos dd { padding: 8px 6px; border-bottom: 1px solid var(--line); margin: 0; }
+dl.glos dt { font-weight: 600; }
+@media (max-width: 640px) { dl.glos { grid-template-columns: minmax(0, 1fr); } dl.glos dt { border-bottom: none; padding-bottom: 0; } }
+pre.csv { background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 10px; font: 12.5px/1.5 var(--f-mono); overflow-x: auto; }
+
+/* consulta de zona */
+.ctrl input[type=text] { width: 130px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--paper); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.tile { border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; display: grid; gap: 2px; min-width: 0; }
+.tile .l { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.tile .v { font: 600 21px/1.1 var(--f-mono); font-variant-numeric: tabular-nums; }
+.tile .s { font-size: 12px; color: var(--muted); }
+.reco { border-left: 4px solid var(--accent); padding: 10px 12px; background: var(--paper); border-radius: 0 8px 8px 0; font-size: 15px; }
+.reco.g { border-left-color: var(--good); } .reco.w { border-left-color: var(--warn); } .reco.b { border-left-color: var(--bad); }
+.reco b.t { display: block; font: 700 17px/1.2 var(--f-display); letter-spacing: .03em; text-transform: uppercase; margin-bottom: 4px; }
+.q-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; align-items: baseline; }
+.q-head h2 { margin: 0; }
+.q-meta { font-size: 13px; color: var(--muted); }
+.chart72 svg { width: 100%; height: auto; display: block; }
+.charts2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.chart72 text { font: 12px var(--f-mono); fill: var(--muted); }
+.ventanas { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 3px; font-size: 14px; }
+.factores { display: grid; grid-template-columns: minmax(120px, auto) minmax(80px, 1fr) auto; gap: 5px 10px; align-items: center; font-size: 13.5px; }
+.factores i { display: block; height: 7px; border-radius: 3px; background: var(--accent); }
+.factores .bar { background: var(--line); border-radius: 3px; overflow: hidden; }
+.factores small { grid-column: 1 / -1; color: var(--muted); margin: -3px 0 3px; }
+
+/* sardina y anchoveta */
+.pel-top { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: end; justify-content: space-between; }
+.pel-top h2 { margin: 0; }
+.grupo { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.grupo .presets { gap: 4px; }
+.veda { border: 1px solid var(--warn); background: var(--chip-warn); color: var(--ink); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+.veda b { color: var(--warn); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Radar <span>Jurel</span> Centro-Sur</h1>
+      <div class="sub">Índice de agregación con 10 factores · 33°–41°S · hoy y 7 días · se actualiza solo cada 3 h</div>
+    </div>
+    <div class="status">
+      <span class="dot" id="dot"></span><span id="statusTxt">Sin datos aún</span>
+      <button class="btn" id="btnRefresh" type="button">Actualizar ahora</button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Secciones">
+    <button class="tab" role="tab" id="tabRadar" aria-controls="vistaRadar" aria-selected="true" type="button">Radar</button>
+    <button class="tab" role="tab" id="tabPel" aria-controls="vistaPel" aria-selected="false" type="button">Sardina y Anchoveta</button>
+    <button class="tab" role="tab" id="tabZona" aria-controls="vistaZona" aria-selected="false" type="button">Consulta de zona</button>
+    <button class="tab" role="tab" id="tabGlos" aria-controls="vistaGlos" aria-selected="false" type="button">Glosario y guía</button>
+  </nav>
+
+  <div class="vista" id="vistaRadar" role="tabpanel" aria-labelledby="tabRadar">
+  <div class="card err" id="errBox" hidden></div>
+
+  <section class="card" aria-label="Zona de búsqueda">
+    <div class="zona-top">
+      <h2>Zona de búsqueda</h2>
+      <div class="presets" id="presets"></div>
+    </div>
+    <div class="zona-grid">
+      <div>
+        <div class="ctrl">
+          <label for="zN">Desde (°S, norte)<input type="number" id="zN" step="0.5" min="33" max="41" value="33"></label>
+          <label for="zS">Hasta (°S, sur)<input type="number" id="zS" step="0.5" min="33" max="41" value="41"></label>
+          <label for="zDmin">Costa mín. (mn)<input type="number" id="zDmin" step="10" min="0" value="0"></label>
+          <label for="zDmax">Costa máx. (mn)<input type="number" id="zDmax" step="10" min="0" value="400"></label>
+          <label for="zPort">Máx. desde puerto (mn)<input type="number" id="zPort" step="10" min="0" value="0"></label>
+        </div>
+        <p class="note" style="margin-top:8px">El filtro cambia los cuadrantes, la tira de días y la lectura. En el mapa, lo que queda fuera de la zona se ve atenuado. «Máx. desde puerto» en 0 = sin límite.</p>
+        <p class="zona-actual" id="zonaActual"></p>
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Zona</th><th>Mejor índice</th><th>Mejor cuadrante</th><th>TSM</th><th>Olas</th><th id="thZDist">mn</th></tr></thead>
+          <tbody id="zonasBody"></tbody>
+        </table>
+        <p class="note">Comparación del día elegido con los mismos límites de distancia. Toca una zona para filtrar por ella.</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-label="Días"><div class="days" id="days"></div></section>
+
+  <div class="main">
+    <section class="card mapcard" aria-label="Mapa">
+      <div class="layers" id="layers"></div>
+      <div class="mapbox" id="mapbox">
+        <canvas id="map" aria-label="Mapa de la zona centro-sur con el índice por celda"></canvas>
+        <div class="tip" id="tip" hidden></div>
+      </div>
+      <div class="legend"><span id="legLo"></span><canvas id="leg" width="180" height="10"></canvas><span id="legHi"></span><span id="legName"></span></div>
+      <div class="ctrl" style="margin-top:8px"><button class="btn ghost small" id="btnFichaSel" type="button" disabled>Analizar celda seleccionada</button><span class="note">Toca una celda del mapa para elegirla.</span></div>
+    </section>
+
+    <div class="col">
+      <section class="card">
+        <h2 id="vTitle">Lectura del día</h2>
+        <div class="verdict" id="verdict">Cargando datos…</div>
+      </section>
+      <section class="card">
+        <h2>Cuadrantes prioritarios</h2>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>#</th><th>Posición</th><th>Índice</th><th>TSM</th><th>Termoclina</th><th>Cardumen</th><th>Chl</th><th>Disp.</th><th>Olas</th><th id="thDist">mn · rumbo</th></tr></thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+        <p class="note">Termoclina y cardumen en metros. Cardumen es la profundidad estimada a partir de la capa de mezcla y la termoclina. Chl en mg/m³. Disp. va de 0 (cardumen compacto) a 1 (disperso). Toca una fila para marcarla en el mapa; las celdas son de 0,4° (unas 24 mn).</p>
+      </section>
+      <section class="card">
+        <h2>Fuentes de datos</h2>
+        <div class="fuentes" id="fuentes"></div>
+      </section>
+    </div>
+  </div>
+
+  <div class="row2">
+    <section class="card cui">
+      <h2>Viento y surgencia costera</h2>
+      <div class="ctrl" style="margin-bottom:8px">
+        <label for="cuiLat">Latitud costera <select id="cuiLat"></select></label>
+      </div>
+      <div id="cuiChart"></div>
+      <p class="note" id="cuiTxt"></p>
+    </section>
+
+    <section class="card">
+      <h2>Presión de pesca</h2>
+      <p class="note">Carga los lances recientes de la flota en un CSV con las columnas <span class="mono">fecha, lat, lon, captura_t</span> y, si quieres separar especies, <span class="mono">especie</span> (jurel, sardina o anchoveta), una fila por lance e incluyendo los lances en cero. También sirven posiciones de búsqueda con captura 0. El radar usa los últimos 10 días. Donde hubo captura, sube la evidencia de jurel. Donde hubo mucho esfuerzo sin captura, baja la evidencia y sube la dispersión. Los datos quedan solo en este navegador.</p>
+      <div class="ctrl" style="margin-top:8px">
+        <label for="csvLances">Archivo CSV <input type="file" id="csvLances" accept=".csv,.txt"></label>
+        <button class="btn ghost small" id="btnBorrarLances" type="button">Borrar lances</button>
+      </div>
+      <p class="note mono" id="lancesInfo" style="margin-top:8px">Sin lances cargados. El factor de presión queda neutro.</p>
+      <p class="note">Ejemplo de formato:<br><span class="mono">fecha,lat,lon,captura_t<br>30-10-2026,-37.85,-75.10,180<br>31-10-2026,-38.20,-75.40,0</span></p>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Ajustes del cálculo</h2>
+    <div class="ctrl">
+      <label for="tMin">TSM mínima (°C)<input type="number" id="tMin" step="0.5" value="13"></label>
+      <label for="tMax">TSM máxima (°C)<input type="number" id="tMax" step="0.5" value="15.5"></label>
+      <label for="nino">Ajuste El Niño (°C)<input type="number" id="nino" step="0.25" value="0.5"></label>
+      <label for="red">Alcance de la red (m)<input type="number" id="red" step="10" value="120"></label>
+      <label for="distTip">Distancia típica de pesca (mn)<input type="number" id="distTip" step="5" min="5" value="25"></label>
+      <label for="wML">Peso del modelo ML (%)<input type="number" id="wML" step="10" min="0" max="100" value="50"></label>
+      <label for="port">Distancias desde <select id="port"></select></label>
+    </div>
+    <p class="note" id="mlSug" hidden style="margin-top:10px"></p>
+    <p class="note">«Peso del modelo ML»: cuánto pesa en el índice final la probabilidad del modelo entrenado con los lances (0 = solo factores, 100 = solo modelo). Solo aplica en el link de GitHub, cuando el modelo ya está entrenado.</p>
+    <h3>Peso de cada factor</h3>
+    <div class="pesos" id="pesos"></div>
+    <div class="ctrl" style="margin-top:8px"><button class="btn ghost small" id="btnPesos" type="button">Restablecer pesos</button></div>
+    <details style="margin-top:12px">
+      <summary>Cómo se calcula cada factor</summary>
+      <ul class="comp-list" id="compList"></ul>
+      <p class="note" style="margin-top:8px">Cada factor va de 0 a 1 y el índice es su media geométrica ponderada (0–100). Si un factor no tiene datos, cuenta como neutro (0,6), así que un dato faltante no hunde ni infla una zona. Es un índice relativo para comparar zonas y días, no una probabilidad calibrada. Las olas no entran al índice; se muestran como operabilidad para cerco.</p>
+    </details>
+    <details style="margin-top:10px">
+      <summary>Clave de Open-Meteo (uso comercial)</summary>
+      <div class="ctrl" style="margin-top:8px">
+        <label for="apikey">API key<input type="password" id="apikey" autocomplete="off" placeholder="opcional"></label>
+        <button class="btn ghost small" id="btnKey" type="button">Guardar clave</button>
+      </div>
+      <p class="note">Sin clave se usa el acceso gratuito de Open-Meteo, que es para uso no comercial. Para uso de empresa, contrata un plan en open-meteo.com/en/pricing y pega aquí la clave. Queda guardada solo en este navegador.</p>
+    </details>
+  </section>
+  </div>
+
+  <div class="vista" id="vistaPel" role="tabpanel" aria-labelledby="tabPel" hidden>
+    <section class="card">
+      <div class="pel-top">
+        <div>
+          <h2>Sardina común y Anchoveta</h2>
+          <div class="sub">Pelágicos costeros · franja de 0 a 45 mn · celdas de 0,15° (9 mn) · hoy y 7 días</div>
+        </div>
+        <div class="status"><span class="dot" id="pDot"></span><span id="pStatus">Sin datos aún</span>
+          <button class="btn" id="pRefresh" type="button">Actualizar</button></div>
+      </div>
+      <div class="ctrl" style="margin-top:12px">
+        <div class="grupo">Especie<div class="presets" id="pEspecie"></div></div>
+        <div class="grupo">Zona<div class="presets" id="pZona"></div></div>
+        <label for="pVeda">Estado de la pesquería
+          <select id="pVeda">
+            <option value="abierta">Temporada abierta</option>
+            <option value="reclutamiento">Veda de reclutamiento</option>
+            <option value="reproductiva">Veda reproductiva</option>
+          </select>
+        </label>
+      </div>
+      <p class="note" style="margin-top:8px">El estado de veda lo fija Subpesca cada semana según el monitoreo de IFOP. Revísalo en subpesca.cl (Comité de manejo de anchoveta y sardina común) y márcalo aquí; la página no puede leerlo sola.</p>
+    </section>
+    <div class="veda" id="pVedaBanner" hidden></div>
+    <div class="card err" id="pErr" hidden></div>
+    <section aria-label="Días"><div class="days" id="pDays"></div></section>
+    <div class="main">
+      <section class="card mapcard">
+        <div class="layers" id="pLayers"></div>
+        <div class="mapbox" id="pMapbox">
+          <canvas id="pMap" aria-label="Mapa costero con el índice de sardina y anchoveta" style="width:100%;display:block;border-radius:6px;cursor:crosshair"></canvas>
+          <div class="tip" id="pTip" hidden></div>
+        </div>
+        <div class="legend"><span id="pLegLo"></span><canvas id="pLeg" width="180" height="10"></canvas><span id="pLegHi"></span><span id="pLegName"></span></div>
+        <p class="note" style="margin-top:6px">Línea punteada: 5 mn de la costa. Triángulos: desembocaduras de ríos.</p>
+      </section>
+      <div class="col">
+        <section class="card"><h2 id="pVTitle">Lectura del día</h2><div class="verdict" id="pVerdict">Abre esta pestaña con conexión para cargar los datos costeros.</div></section>
+        <section class="card">
+          <h2>Caladeros prioritarios</h2>
+          <div class="tablewrap"><table>
+            <thead><tr><th>#</th><th>Posición</th><th>Índice</th><th>TSM</th><th>Chl</th><th>Costa</th><th>Fondo</th><th>Olas</th><th id="pThDist">mn · rumbo</th></tr></thead>
+            <tbody id="pTbody"></tbody>
+          </table></div>
+          <p class="note">Costa en mn, fondo en m, Chl en mg/m³. Caladeros separados al menos 0,3° entre sí. Mar para embarcaciones menores: Operable bajo 2,5 m, Difícil de 2,5 a 3,5 m, No operable desde 3,5 m.</p>
+        </section>
+        <section class="card"><h2>Fuentes de datos</h2><div class="fuentes" id="pFuentes"></div></section>
+      </div>
+    </div>
+    <section class="card">
+      <h2>Ajustes de sardina y anchoveta</h2>
+      <div class="ctrl">
+        <label for="psMin">Sardina TSM mín. (°C)<input type="number" id="psMin" step="0.5" value="11.5"></label>
+        <label for="psMax">Sardina TSM máx. (°C)<input type="number" id="psMax" step="0.5" value="13.5"></label>
+        <label for="paMin">Anchoveta TSM mín. (°C)<input type="number" id="paMin" step="0.5" value="12"></label>
+        <label for="paMax">Anchoveta TSM máx. (°C)<input type="number" id="paMax" step="0.5" value="15"></label>
+        <label for="pNino">Ajuste El Niño (°C)<input type="number" id="pNino" step="0.25" value="0.5"></label>
+        <label for="pChlOpt">Clorofila óptima (mg/m³)<input type="number" id="pChlOpt" step="0.5" value="4"></label>
+      </div>
+      <h3>Peso de cada factor</h3>
+      <div class="pesos" id="pPesos"></div>
+      <div class="ctrl" style="margin-top:8px"><button class="btn ghost small" id="pBtnPesos" type="button">Restablecer pesos</button></div>
+      <details style="margin-top:12px">
+        <summary>Cómo se calcula cada factor</summary>
+        <ul class="comp-list" id="pCompList"></ul>
+        <p class="note" style="margin-top:8px">Igual que en el jurel, el índice es la media geométrica ponderada de los factores (0–100) y un factor sin datos cuenta como neutro (0,6). Los rangos de temperatura vienen de lo observado en la zona centro-sur y conviene ajustarlos con lo que vea la flota. Los lances se toman del mismo CSV del Radar, solo las filas cuya columna especie diga sardina o anchoveta.</p>
+      </details>
+    </section>
+  </div>
+
+  <div class="vista" id="vistaZona" role="tabpanel" aria-labelledby="tabZona" hidden>
+    <section class="card">
+      <h2>Consulta de zona</h2>
+      <div class="ctrl">
+        <label for="qLugar">Lugar de referencia
+          <select id="qLugar"><option value="">Escribir coordenadas…</option></select>
+        </label>
+        <label for="qMar">Mar adentro (mn)<input type="number" id="qMar" value="60" step="10" min="0" max="400"></label>
+        <label for="qLat">Latitud (°S)<input type="text" id="qLat" placeholder="37°30' o -37.5" autocomplete="off"></label>
+        <label for="qLon">Longitud (°W)<input type="text" id="qLon" placeholder="75°00' o -75.0" autocomplete="off"></label>
+        <label for="qRadio">Radio del área
+          <select id="qRadio"><option value="10">10 mn</option><option value="20" selected>20 mn</option><option value="40">40 mn</option></select>
+        </label>
+        <button class="btn" id="btnConsulta" type="button">Analizar zona</button>
+      </div>
+      <p class="note" style="margin-top:8px">Elige un lugar de la costa y cuántas millas mar adentro, o escribe coordenadas (grados decimales o grados y minutos). También puedes tocar una celda en el mapa del Radar y presionar «Analizar celda seleccionada». Las condiciones de ahora y de las próximas 72 h se consultan al momento para ese punto exacto.</p>
+    </section>
+    <div class="vista" id="qResultado"></div>
+  </div>
+
+  <div class="vista guia" id="vistaGlos" role="tabpanel" aria-labelledby="tabGlos" hidden>
+    <section class="card">
+      <h2>Qué es el Radar Jurel</h2>
+      <p>El Radar indica, para hoy y los próximos 7 días, en qué zonas entre 33°S y 41°S es más probable encontrar jurel agregado. Cubre desde la costa hasta unas 400 mn, en celdas de 0,4° (unas 24 mn por lado). Cada vez que se abre descarga datos actualizados y combina 10 factores en un <b>índice de 0 a 100</b> por celda. No reemplaza la experiencia del patrón ni la ecosonda: sirve para orientar la búsqueda y elegir el día de zarpe.</p>
+    </section>
+
+    <section class="card">
+      <h2>Uso diario</h2>
+      <ol>
+        <li><b>Abre el link.</b> Si los datos tienen más de 3 horas se descargan solos (1 a 2 minutos). Arriba debe decir «Datos del … · 5 de 5 fuentes al día».</li>
+        <li><b>Carga los lances recientes</b> (recomendado) en «Presión de pesca».</li>
+        <li><b>Elige la zona de búsqueda</b>: toda la zona, Norte, Centro, Sur o límites propios. La tabla de zonas compara las tres el día elegido.</li>
+        <li><b>Mira la tira de 8 días.</b> «Mejor ventana» combina el índice más alto con mar operable.</li>
+        <li><b>Lee la «Lectura del día»</b>: zona, mejor cuadrante, profundidad del cardumen, factor fuerte y débil, viento.</li>
+        <li><b>Copia los cuadrantes</b> con mar operable: posición, millas y rumbo desde el puerto.</li>
+        <li><b>Confirma en el mapa</b> con las capas Frente térmico, Termoclina y Clorofila. Pasa el mouse por una celda para ver sus 10 factores.</li>
+      </ol>
+      <h3>Tener un link</h3>
+      <ul>
+        <li><b>Uso personal:</b> guarda el archivo en una carpeta fija, ábrelo con doble clic y agrégalo a favoritos.</li>
+        <li><b>Compartir:</b> en app.netlify.com/drop arrastra el archivo y se obtiene una dirección web; o súbelo a SharePoint o a un servidor interno.</li>
+        <li><b>Celular:</b> abre el link y usa «Agregar a pantalla de inicio».</li>
+        <li>Cada navegador guarda sus propios ajustes, zona, pesos y lances.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>El índice</h2>
+      <p>Mide qué tan favorables son las condiciones de una celda para que el jurel esté agregado y al alcance de la flota. Es <b>relativo</b>: compara zonas y días, no es una probabilidad. Cada factor vale de 0 a 1 y el índice es su media geométrica ponderada × 100, así un factor muy malo pesa más que en un promedio simple. Un factor sin datos vale 0,6 (neutro).</p>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Índice</th><th>Lectura práctica</th></tr></thead>
+        <tbody>
+          <tr><td>85 a 100</td><td>Condiciones muy favorables. Prioridad de búsqueda.</td></tr>
+          <tr><td>70 a 84</td><td>Favorables. Buena alternativa o zona de paso.</td></tr>
+          <tr><td>50 a 69</td><td>Regulares. Solo si hay evidencia de pesca reciente.</td></tr>
+          <tr><td>Menos de 50</td><td>Poco favorables.</td></tr>
+        </tbody>
+      </table></div>
+      <p class="note" style="margin-top:8px">Los rangos son orientativos: conviene compararlos con la pesca real y ajustar pesos. Las olas no entran al índice; se muestran como operabilidad para cerco: Operable bajo 3 m, Difícil de 3 a 4 m, No operable desde 4 m.</p>
+    </section>
+
+    <section class="card">
+      <h2>Los 10 factores</h2>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Factor</th><th>Peso</th><th>Sube cuando…</th><th>Fuente</th></tr></thead>
+        <tbody>
+          <tr><td>Térmico</td><td>18</td><td>La TSM está en la ventana (13,5–16 °C con ajuste El Niño) y a 50 m hay 12–15 °C. Pesa 60% superficie y 40% a 50 m.</td><td>Copernicus (superficie y perfiles)</td></tr>
+          <tr><td>Termoclina</td><td>14</td><td>La termoclina está entre 15 y 80 m y es marcada, y el cardumen estimado queda dentro del alcance de la red.</td><td>Copernicus (perfiles)</td></tr>
+          <tr><td>Alimento</td><td>14</td><td>La clorofila está cerca de 0,8 mg/m³ o hay un borde de clorofila cerca.</td><td>Satélite VIIRS</td></tr>
+          <tr><td>Frente térmico</td><td>12</td><td>La TSM cambia rápido en distancias cortas.</td><td>Copernicus</td></tr>
+          <tr><td>Cohesión</td><td>10</td><td>Poco mar de viento, capa de mezcla somera, frente marcado, agua no sobre la ventana y poco esfuerzo de pesca reciente.</td><td>Copernicus, lances</td></tr>
+          <tr><td>Evidencia de pesca</td><td>10</td><td>Hubo capturas cerca en los últimos días. Baja con mucho esfuerzo sin captura. Sin lances queda neutro.</td><td>CSV de lances</td></tr>
+          <tr><td>Convergencia</td><td>8</td><td>Las corrientes superficiales convergen sobre la celda.</td><td>Copernicus</td></tr>
+          <tr><td>Surgencia-relajación</td><td>8</td><td>Hubo un pulso de viento sur en los últimos 5 días y ahora afloja. Pesa más cerca de la costa.</td><td>Viento ECMWF</td></tr>
+          <tr><td>Fondo y distancia</td><td>6</td><td>La celda está cerca de la distancia típica de pesca (25 mn por defecto, mediana de los lances con jurel 2020–2026).</td><td>Lances Orizon, batimetría ETOPO</td></tr>
+          <tr><td>Historial de la flota</td><td>10</td><td>La flota encontró jurel en esa zona en el mismo mes en años anteriores (2020–2026). Sin historial vale 0,3, no cero.</td><td>Lances Orizon 2020–2026</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section class="card">
+      <h2>Glosario</h2>
+      <input type="search" class="gl-buscar" id="glBuscar" placeholder="Buscar un término, por ejemplo termoclina" aria-label="Buscar en el glosario">
+      <dl class="glos" id="glosario">
+        <dt>Alcance de la red</dt><dd>Profundidad máxima a la que llega el cerco, en metros (por defecto 120 m). Si el cardumen estimado está más hondo, baja el factor termoclina.</dd>
+        <dt>Ajuste El Niño</dt><dd>Grados que se suman a la ventana térmica porque en años Niño el jurel tolera agua algo más cálida. Por defecto +0,5 °C.</dd>
+        <dt>Batimetría / Fondo</dt><dd>Profundidad del fondo marino en metros. Bajo 200 m es plataforma; entre 200 y 1.500 m, talud.</dd>
+        <dt>Capa de mezcla (MLD)</dt><dd>Capa superficial donde el viento mezcla el agua y la temperatura es casi pareja. Se toma como la profundidad donde el agua está 0,5 °C más fría que en superficie. Si es profunda, alimento y cardumen se reparten en más metros.</dd>
+        <dt>Celda</dt><dd>Cuadrado de 0,4° × 0,4° (unas 24 mn) donde se calcula el índice.</dd>
+        <dt>Clorofila (Chl)</dt><dd>Pigmento del fitoplancton medido por satélite, en mg/m³. Indica producción de alimento. Bajo 0,2 es agua pobre; sobre 5, bloom costero.</dd>
+        <dt>Cohesión</dt><dd>Qué tan compacto estaría el cardumen. Es lo contrario de la dispersión.</dd>
+        <dt>Convergencia</dt><dd>Zona donde las corrientes superficiales se juntan y acumulan plancton. En el mapa, azul = convergencia, rojo = divergencia (×10⁻⁶ s⁻¹).</dd>
+        <dt>Cuadrante prioritario</dt><dd>Una de las 8 celdas con mayor índice dentro de la zona de búsqueda, separadas al menos 0,75° entre sí.</dd>
+        <dt>CUI (índice de surgencia)</dt><dd>Transporte de agua hacia mar adentro causado por el viento, en m³/s por 100 m de costa. Positivo (verde) = viento sur, surgencia activa. Negativo (naranja) = viento norte, surgencia cortada.</dd>
+        <dt>Dispersión</dt><dd>De 0 (cardumen compacto) a 1 (disperso). Sube con mar de viento fuerte, capa de mezcla profunda, frentes débiles, agua muy cálida y mucho esfuerzo reciente.</dd>
+        <dt>Evidencia / Presión de pesca</dt><dd>Lo que dicen los lances recientes. Las capturas cercanas suben la evidencia; mucho esfuerzo sin captura indica zona trabajada o cardumen disperso.</dd>
+        <dt>Frente térmico</dt><dd>Borde donde la temperatura cambia rápido entre dos masas de agua, en °C/km. Desde unos 0,02 °C/km es un frente marcado.</dd>
+        <dt>Mejor ventana</dt><dd>Día de la semana con mejor combinación de índice y mar operable dentro de la zona de búsqueda.</dd>
+        <dt>mn · rumbo</dt><dd>Distancia en millas náuticas y rumbo verdadero (0–360°) desde el puerto elegido hasta el centro del cuadrante.</dd>
+        <dt>Olas máx</dt><dd>Altura significativa máxima del oleaje en el día, en metros. Define Operable, Difícil o No operable.</dd>
+        <dt>Profundidad del cardumen</dt><dd>Estimación: promedio entre la capa de mezcla y la termoclina, en metros. No es una lectura de ecosonda.</dd>
+        <dt>Relajación</dt><dd>Caída del viento sur después de 3 a 5 días de surgencia. Los frentes se ordenan y el recurso tiende a agregarse.</dd>
+        <dt>Surgencia</dt><dd>Ascenso de agua fría y rica en nutrientes cuando el viento sur empuja el agua superficial mar adentro.</dd>
+        <dt>T 50 m</dt><dd>Temperatura del agua a 50 m de profundidad, según los perfiles de Copernicus.</dd>
+        <dt>Termoclina</dt><dd>Capa donde la temperatura baja bruscamente con la profundidad. Actúa como un «piso» que concentra el cardumen encima. Somera y marcada (15–80 m) es favorable.</dd>
+        <dt>TSM</dt><dd>Temperatura superficial del mar, en °C.</dd>
+        <dt>Ventana térmica</dt><dd>Rango de TSM preferido por el jurel. Por defecto 13–15,5 °C, más el ajuste El Niño.</dd>
+        <dt>Sardina común y anchoveta</dt><dd>Pestaña aparte para estos pelágicos costeros: franja de 0 a 45 mn, celdas de 0,15° (9 mn) y factores propios (ventana térmica por especie, clorofila alta, surgencia, plataforma, capa de mezcla somera, plumas de río).</dd>
+        <dt>Pluma de río</dt><dd>Agua más dulce y turbia que sale de una desembocadura (Itata, Biobío, Imperial, Toltén…). Puede concentrar alimento, pero su efecto sobre sardina y anchoveta varía entre años.</dd>
+        <dt>Veda de reclutamiento / reproductiva</dt><dd>Cierres de sardina común y anchoveta que Subpesca activa o levanta cada semana según el monitoreo de IFOP: reclutamiento (verano, por exceso de juveniles) y reproductiva (invierno, por desove, según el IGS).</dd>
+        <dt>IGS</dt><dd>Índice gonadosomático: peso de las gónadas respecto del pez. Sobre el umbral (5,6% sardina, 5,9% anchoveta) indica desove y activa la veda reproductiva.</dd>
+        <dt>Consulta de zona</dt><dd>Ficha de un punto específico: condiciones de ahora y de las próximas 72 h (viento, olas, corriente, TSM), ventanas para operar, índice del área por 8 días, factores y lances cercanos, con una recomendación: Ir, Esperar ventana, Zona de paso o Descartar.</dd>
+        <dt>Ventana operable</dt><dd>Horas seguidas con ola bajo 3 m y viento bajo 22 kn, de al menos 3 h.</dd>
+        <dt>Modelo ML</dt><dd>Modelo de machine learning (XGBoost) entrenado con los lances de la flota y las condiciones de Copernicus de cada día: TSM, T 50 m, capa de mezcla, termoclina, frente térmico, clorofila, viento, distancia a la costa, latitud y mes. Entrega la probabilidad de que un lance en esa celda tenga jurel. Se reentrena el día 1 de cada mes y predice cada mañana.</dd>
+        <dt>AUC</dt><dd>Mide qué tan bien el modelo separa lances con y sin jurel: 0,5 es azar y 1 es perfecto. Se calcula dejando fuera un año completo cada vez, para medir cómo le iría con un año que no vio. Sobre 0,7 ya es útil para orientar la búsqueda.</dd>
+        <dt>Historial de la flota</dt><dd>Factor y capa construidos con 3.462 lances de 2020–2026 con posición válida: dónde se encontró jurel en cada mes, suavizado con los meses vecinos. Refleja también dónde ha buscado la flota, así que una zona sin historial no es necesariamente mala.</dd>
+        <dt>Distancia típica de pesca</dt><dd>Distancia a la costa preferida por el factor Fondo y distancia. Por defecto 25 mn: la mediana de los lances con jurel 2020–2026 (la mitad entre 16 y 32 mn).</dd>
+        <dt>Zona de búsqueda</dt><dd>Filtro por latitud, distancia a la costa y distancia desde el puerto. Norte = 33°–35,5°S, Centro = 35,5°–38,5°S, Sur = 38,5°–41°S.</dd>
+      </dl>
+      <p class="note" id="glVacio" hidden>Ningún término coincide con la búsqueda.</p>
+    </section>
+
+    <section class="card">
+      <h2>Carga de lances (CSV)</h2>
+      <p>Archivo separado por comas o punto y coma, una fila por lance e incluyendo los lances en cero. Desde Excel: «Guardar como → CSV».</p>
+      <pre class="csv">fecha,lat,lon,captura_t
+30-10-2026,-37.85,-75.10,180
+31-10-2026,-38.20,-75.40,0</pre>
+      <ul>
+        <li><b>fecha:</b> día-mes-año o año-mes-día.</li>
+        <li><b>lat y lon:</b> grados decimales o grados y minutos (37°51). Siempre se toma como sur y oeste.</li>
+        <li><b>captura_t:</b> toneladas del lance; 0 = búsqueda sin pesca.</li>
+        <li><b>especie</b> (opcional): jurel, sardina o anchoveta. Sin esta columna, todos los lances cuentan para el jurel.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Problemas frecuentes</h2>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Qué se ve</th><th>Qué hacer</th></tr></thead>
+        <tbody>
+          <tr><td>«Sin conexión con Open-Meteo»</td><td>Revisar internet o pedir a TI que habilite open-meteo.com y noaa.gov.</td></tr>
+          <tr><td>«Open-Meteo limitó las consultas»</td><td>Esperar unos minutos. Para uso intensivo, contratar la clave comercial.</td></tr>
+          <tr><td>Aviso «No se pudo leer: …»</td><td>Una fuente no respondió. El radar sigue y ese factor queda neutro. Reintentar más tarde.</td></tr>
+          <tr><td>Termoclina en rojo o amarillo</td><td>La tarea diaria de GitHub no corrió o falló. En GitHub, pestaña Actions, revisa «Actualizar perfiles Copernicus» y presiona «Run workflow».</td></tr>
+          <tr><td>Clorofila «con precaución»</td><td>La imagen tiene más de 15 días; el factor alimento pesa la mitad.</td></tr>
+          <tr><td>Capas grises</td><td>Esa fuente no tiene datos o no hay lances cargados. Ver «Fuentes de datos».</td></tr>
+          <tr><td>Sin cuadrantes</td><td>La zona de búsqueda es muy chica o queda sobre tierra. Ampliar límites o elegir «Toda la zona».</td></tr>
+          <tr><td>Se perdieron ajustes o lances</td><td>Se abrió en otro navegador o en ventana privada. Volver a cargarlos.</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+  </div>
+</div>
+
+<script>
+"use strict";
+// ================================================================== configuración
+const GRID = { latMin: -40.8, latMax: -33.2, lonMin: -79.8, lonMax: -72.2, step: 0.4 };
+const VIEW = { latMin: -41.4, latMax: -32.6, lonMin: -80.4, lonMax: -71.3 };
+const PUERTOS = {
+  "Coronel": [-37.03, -73.16], "Talcahuano": [-36.72, -73.12], "Lebu": [-37.61, -73.66],
+  "San Antonio": [-33.59, -71.62], "Corral": [-39.89, -73.43]
+};
+const COSTA = [
+  [-32.4, -71.42], [-33.02, -71.63], [-33.59, -71.62], [-34.0, -71.86], [-34.39, -72.02],
+  [-34.9, -72.17], [-35.33, -72.42], [-35.84, -72.64], [-36.13, -72.79], [-36.5, -72.92],
+  [-36.62, -73.02], [-36.6, -73.1], [-36.72, -73.15], [-36.83, -73.14], [-36.95, -73.17],
+  [-37.03, -73.17], [-37.1, -73.16], [-37.25, -73.32], [-37.22, -73.46], [-37.15, -73.58],
+  [-37.35, -73.62], [-37.61, -73.67], [-38.0, -73.5], [-38.34, -73.5], [-38.78, -73.41],
+  [-39.1, -73.25], [-39.43, -73.22], [-39.87, -73.42], [-40.2, -73.7], [-40.57, -73.75],
+  [-41.0, -73.93], [-41.6, -73.75]
+];
+const ISLAS = [{ lat: -37.03, lon: -73.53, r: 0.06 }, { lat: -38.37, lon: -73.92, r: 0.07 }];
+
+// factores del índice: id, nombre, peso por defecto, explicación
+const FACTORES = [
+  { id: "termico", n: "Térmico", w: 18, d: "Qué tan cerca está la temperatura de la ventana del jurel, en superficie (60%) y a 50 m (40%)." },
+  { id: "termoclina", n: "Termoclina", w: 14, d: "Una termoclina somera y marcada (15–80 m) concentra el cardumen en una capa al alcance de la red. Si es profunda o difusa, el jurel baja y se dispersa en la vertical. También castiga cuando la profundidad estimada del cardumen supera el alcance de la red." },
+  { id: "alimento", n: "Alimento", w: 14, d: "Clorofila satelital como indicador de alimento: mejor en aguas moderadamente productivas (≈0,8 mg/m³) y en bordes de clorofila. Ni el agua oligotrófica ni el bloom costero son ideales." },
+  { id: "frente", n: "Frente térmico", w: 12, d: "Gradiente de TSM en los alrededores. El jurel se junta en los bordes de masas de agua." },
+  { id: "cohesion", n: "Cohesión", w: 10, d: "Lo inverso a la dispersión del cardumen. Bajan la cohesión: mar de viento local fuerte, capa de mezcla profunda, frentes débiles, agua más cálida que la ventana y mucho esfuerzo de pesca reciente." },
+  { id: "presion", n: "Evidencia de pesca", w: 10, d: "Lances de los últimos 10 días, con más peso los más recientes. Las capturas cercanas suben el factor. Mucho esfuerzo sin captura lo baja. Sin lances queda neutro." },
+  { id: "convergencia", n: "Convergencia", w: 8, d: "Zonas donde las corrientes superficiales convergen y retienen plancton." },
+  { id: "surgencia", n: "Surgencia-relajación", w: 8, d: "Pulso de viento sur que afloja en los días previos, con más efecto cerca de la costa." },
+  { id: "fondo", n: "Fondo y distancia", w: 6, d: "Preferencia por la distancia a la costa donde la flota pesca jurel: por defecto 25 mn, la mediana de los lances con jurel 2020–2026 (la mitad entre 16 y 32 mn). Baja mucho más cerca o más lejos; las aguas profundas lejanas bajan un poco." },
+  { id: "historial", n: "Historial de la flota", w: 10, d: "Dónde la flota encontró jurel en el mismo mes entre 2020 y 2026 (3.462 lances con posición válida), suavizado en el espacio y con los meses vecinos. Combina cuántos lances con jurel hubo y la tasa de éxito. Una zona sin historial no queda en cero (0,3): puede que nunca se haya buscado ahí." }
+];
+const CACHE_KEY = "radarJurel.v2.data";
+const BATI_KEY = "radarJurel.v2.bati";
+const PREF_KEY = "radarJurel.v2.prefs";
+const KEY_KEY = "radarJurel.v1.apikey";
+const LANCES_KEY = "radarJurel.v2.lances";
+const REFRESH_MS = 3 * 3600 * 1000;
+const TZ = "America/Santiago";
+const ERDDAP = {
+  rtofs: [
+    { base: "https://coastwatch.pfeg.noaa.gov/erddap/griddap/ncepRtofsG3DForeDaily_LonPM180", lon360: false },
+    { base: "https://coastwatch.pfeg.noaa.gov/erddap/griddap/ncepRtofsG3DForeDaily", lon360: true }
+  ],
+  chl: [
+    "https://coastwatch.pfeg.noaa.gov/erddap/griddap/nesdisVHNnoaaSNPPnoaa20NRTchlaGapfilledDaily",
+    "https://coastwatch.noaa.gov/erddap/griddap/noaacwNPPN20VIIRSDINEOFDaily"
+  ],
+  bati: "https://coastwatch.pfeg.noaa.gov/erddap/griddap/etopo180"
+};
+
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } },
+  del(k) { try { localStorage.removeItem(k); } catch (e) { /* nada */ } }
+};
+
+// ================================================================== utilidades
+const R2D = 180 / Math.PI, D2R = Math.PI / 180;
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const isNum = v => typeof v === "number" && isFinite(v);
+function mean(a) { let s = 0, n = 0; for (const v of a) if (isNum(v)) { s += v; n++; } return n ? s / n : NaN; }
+function maxv(a) { let m = -Infinity; for (const v of a) if (isNum(v) && v > m) m = v; return m === -Infinity ? NaN : m; }
+function r2(v) { return isNum(v) ? Math.round(v * 100) / 100 : null; }
+function coastLon(lat) {
+  for (let i = 0; i < COSTA.length - 1; i++) {
+    const [a1, o1] = COSTA[i], [a2, o2] = COSTA[i + 1];
+    if (lat <= a1 && lat >= a2) return o1 + (o2 - o1) * (lat - a1) / (a2 - a1);
+  }
+  return lat > COSTA[0][0] ? COSTA[0][1] : COSTA[COSTA.length - 1][1];
+}
+function distMn(la1, lo1, la2, lo2) {
+  const p1 = la1 * D2R, p2 = la2 * D2R, dl = (lo2 - lo1) * D2R;
+  const a = Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(a)) / 1.852;
+}
+function rumbo(la1, lo1, la2, lo2) {
+  const p1 = la1 * D2R, p2 = la2 * D2R, dl = (lo2 - lo1) * D2R;
+  const x = Math.sin(dl) * Math.cos(p2), y = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+  return (Math.atan2(x, y) * R2D + 360) % 360;
+}
+function gm(x, h) { const a = Math.abs(x); let g = Math.floor(a), m = Math.round((a - g) * 60); if (m === 60) { g++; m = 0; } return `${g}°${String(m).padStart(2, "0")}'${h}`; }
+function fmtPos(lat, lon) { return `${gm(lat, "S")} ${gm(lon, "W")}`; }
+function hoyLocal() { return new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date()); }
+const DIAS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+function etiquetaDia(iso) { const d = new Date(iso + "T12:00:00"); return `${DIAS[d.getDay()]} ${d.getDate()}`; }
+function diasEntre(a, b) { return Math.round((new Date(b + "T12:00:00") - new Date(a + "T12:00:00")) / 86400000); }
+function fechaHora(iso) {
+  return new Intl.DateTimeFormat("es-CL", { timeZone: TZ, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+}
+const f1 = v => isNum(v) ? v.toFixed(1) : "–";
+const f0 = v => isNum(v) ? String(Math.round(v)) : "–";
+const espera = ms => new Promise(res => setTimeout(res, ms));
+
+// ================================================================== grilla
+function construirGrilla() {
+  const cells = [];
+  const nR = Math.round((GRID.latMax - GRID.latMin) / GRID.step) + 1;
+  const nC = Math.round((GRID.lonMax - GRID.lonMin) / GRID.step) + 1;
+  for (let r = 0; r < nR; r++) for (let c = 0; c < nC; c++) {
+    const lat = +(GRID.latMin + r * GRID.step).toFixed(2), lon = +(GRID.lonMin + c * GRID.step).toFixed(2);
+    const cl = coastLon(lat);
+    if (lon <= cl - 0.25) cells.push({ r, c, lat, lon, distKm: (cl - lon) * 111.2 * Math.cos(lat * D2R) });
+  }
+  return { cells, nR, nC };
+}
+const G = construirGrilla();
+const PUNTOS_VIENTO = [-33, -34, -35, -36, -37, -38, -39, -40, -41].map(l => [l, +(coastLon(l) - 0.3).toFixed(2)]);
+
+// ================================================================== descargas: Open-Meteo
+function hosts() {
+  const k = (store.get(KEY_KEY) || "").trim();
+  return k ? { marine: "https://customer-marine-api.open-meteo.com", api: "https://customer-api.open-meteo.com", key: k }
+           : { marine: "https://marine-api.open-meteo.com", api: "https://api.open-meteo.com", key: "" };
+}
+async function getJSON(url) {
+  let r;
+  try { r = await fetch(url); } catch (e) { throw new Error("Sin conexión con Open-Meteo. Revisa internet o el firewall de la empresa."); }
+  if (r.status === 429) throw new Error("Open-Meteo limitó las consultas por exceso de uso. Espera unos minutos.");
+  if (!r.ok) { let t = ""; try { t = (await r.json()).reason || ""; } catch (e) {} throw new Error(`Open-Meteo respondió ${r.status}. ${t}`); }
+  const j = await r.json();
+  return Array.isArray(j) ? j : [j];
+}
+function porDia(times, vals, fn) {
+  const m = new Map();
+  for (let i = 0; i < times.length; i++) {
+    const d = times[i].slice(0, 10);
+    if (!m.has(d)) m.set(d, []);
+    m.get(d).push(vals ? vals[i] : null);
+  }
+  const out = {};
+  for (const [d, arr] of m) out[d] = fn(arr);
+  return out;
+}
+async function descargarMarino(onProg) {
+  const h = hosts(), keyQ = h.key ? `&apikey=${encodeURIComponent(h.key)}` : "";
+  const res = [], LOTE = 90;
+  for (let i = 0; i < G.cells.length; i += LOTE) {
+    const lote = G.cells.slice(i, i + LOTE);
+    onProg(`Copernicus vía Open-Meteo: celdas ${i + 1}–${i + lote.length} de ${G.cells.length}`);
+    const url = `${h.marine}/v1/marine?latitude=${lote.map(c => c.lat).join(",")}&longitude=${lote.map(c => c.lon).join(",")}`
+      + `&hourly=sea_surface_temperature,wave_height,wind_wave_height,ocean_current_velocity,ocean_current_direction`
+      + `&past_days=4&forecast_days=8&timezone=${encodeURIComponent(TZ)}&cell_selection=sea${keyQ}`;
+    res.push(...await getJSON(url));
+    if (i + LOTE < G.cells.length) await espera(700);
+  }
+  if (res.length !== G.cells.length) throw new Error("La respuesta de Open-Meteo no trae todas las celdas.");
+  const fechasSet = new Set();
+  const cel = res.map(m => {
+    const h = m.hourly || {}, u = (m.hourly_units || {}).ocean_current_velocity || "km/h";
+    const fac = u === "m/s" ? 1 : (u === "kn" ? 0.5144 : 1 / 3.6);
+    const t = h.time || [];
+    t.forEach(x => fechasSet.add(x.slice(0, 10)));
+    const vel = (h.ocean_current_velocity || []).map(v => isNum(v) ? v * fac : NaN);
+    const dir = h.ocean_current_direction || [];
+    const uu = vel.map((v, k) => v * Math.sin((dir[k]) * D2R)), vv = vel.map((v, k) => v * Math.cos((dir[k]) * D2R));
+    return {
+      sst: porDia(t, h.sea_surface_temperature, mean), ola: porDia(t, h.wave_height, maxv),
+      olaV: porDia(t, h.wind_wave_height, maxv), u: porDia(t, uu, mean), v: porDia(t, vv, mean)
+    };
+  });
+  const fechas = [...fechasSet].sort();
+  const cells = cel.map(x => {
+    const o = {};
+    for (const k of ["sst", "ola", "olaV", "u", "v"]) o[k] = fechas.map(f => r2(x[k][f]));
+    return o;
+  });
+  return { fechas, cells };
+}
+async function descargarViento(onProg) {
+  onProg("Viento ECMWF");
+  const h = hosts(), keyQ = h.key ? `&apikey=${encodeURIComponent(h.key)}` : "";
+  const vq = `latitude=${PUNTOS_VIENTO.map(p => p[0]).join(",")}&longitude=${PUNTOS_VIENTO.map(p => p[1]).join(",")}`
+    + `&hourly=wind_speed_10m,wind_direction_10m&wind_speed_unit=ms&past_days=7&forecast_days=8&timezone=${encodeURIComponent(TZ)}${keyQ}`;
+  let vientos, modelo = "ECMWF IFS";
+  try { vientos = await getJSON(`${h.api}/v1/forecast?${vq}&models=ecmwf_ifs025`); }
+  catch (e) { vientos = await getJSON(`${h.api}/v1/forecast?${vq}`); modelo = "mejor modelo disponible"; }
+  const RHO_A = 1.22, CD = 1.3e-3, RHO_W = 1025, OM = 7.2921e-5;
+  const fs = new Set();
+  const vLat = vientos.map((v, i) => {
+    const h = v.hourly || {}, t = h.time || [];
+    const lat = PUNTOS_VIENTO[i][0], f = 2 * OM * Math.sin(lat * D2R);
+    const cuiH = [], norteH = [];
+    for (let k = 0; k < t.length; k++) {
+      const ws = h.wind_speed_10m[k], wd = h.wind_direction_10m[k];
+      if (!isNum(ws) || !isNum(wd)) { cuiH.push(NaN); norteH.push(NaN); continue; }
+      const vv = -ws * Math.cos(wd * D2R);
+      cuiH.push(-(RHO_A * CD * ws * vv) / (RHO_W * f) * 100); norteH.push(vv < -2 ? 1 : 0);
+    }
+    t.forEach(x => fs.add(x.slice(0, 10)));
+    return { lat, cui: porDia(t, cuiH, mean), norte: porDia(t, norteH, a => a.reduce((s, x) => s + (isNum(x) ? x : 0), 0)) };
+  });
+  const fechas = [...fs].sort();
+  return {
+    modelo, fechas, lats: vLat.map(v => v.lat),
+    cui: vLat.map(v => fechas.map(f => r2(v.cui[f]))),
+    norte: vLat.map(v => fechas.map(f => v.norte[f] ?? null))
+  };
+}
+
+// ================================================================== descargas: ERDDAP (JSONP)
+let JSONP_N = 0;
+function jsonp(url, timeoutMs = 90000) {
+  return new Promise((resolve, reject) => {
+    const cb = "_erddap" + (++JSONP_N) + "_" + Date.now();
+    const s = document.createElement("script");
+    let fin = false;
+    const limpiar = () => { fin = true; try { delete window[cb]; } catch (e) { window[cb] = undefined; } s.remove(); clearTimeout(t); };
+    const t = setTimeout(() => { if (!fin) { limpiar(); reject(new Error("tiempo de espera agotado")); } }, timeoutMs);
+    window[cb] = data => { if (!fin) { limpiar(); resolve(data); } };
+    s.onerror = () => { if (!fin) { limpiar(); reject(new Error("el servidor no entregó datos (dataset caído, sin datos para la consulta o sin conexión)")); } };
+    s.src = url + "&.jsonp=" + cb;
+    document.head.appendChild(s);
+  });
+}
+function erddapURL(base, query) { return `${base}.json?${encodeURIComponent(query)}`; }
+function tabla(j) {
+  const t = j && j.table;
+  if (!t || !t.columnNames || !t.rows) throw new Error("respuesta sin tabla");
+  const cn = t.columnNames.map(s => s.toLowerCase());
+  const idx = pred => cn.findIndex(pred);
+  return {
+    rows: t.rows,
+    iT: idx(c => c === "time"), iLat: idx(c => c.startsWith("lat")), iLon: idx(c => c.startsWith("lon")),
+    iZ: idx(c => c === "depth" || c === "level" || c === "altitude" && cn.length > 4),
+    iV: cn.length - 1
+  };
+}
+// asigna cada celda de la grilla al punto más cercano de una lista de lat / lon
+function vecino(lista, x) {
+  let b = 0, bd = Infinity;
+  for (let i = 0; i < lista.length; i++) { const d = Math.abs(lista[i] - x); if (d < bd) { bd = d; b = i; } }
+  return { i: b, d: bd };
+}
+
+// perfiles.json lo genera cada mañana la tarea de GitHub (scripts/perfiles_copernicus.py)
+async function descargarPerfiles(onProg) {
+  onProg("Perfiles de temperatura Copernicus");
+  if (location.protocol === "file:") throw new Error("Abierto como archivo local: la termoclina solo se carga desde el link de GitHub Pages.");
+  let r;
+  try { r = await fetch("perfiles.json?t=" + Date.now(), { cache: "no-store" }); }
+  catch (e) { throw new Error("No se pudo leer perfiles.json."); }
+  if (!r.ok) throw new Error("Aún no existe perfiles.json: corre la tarea «Actualizar perfiles Copernicus» en la pestaña Actions de GitHub.");
+  const j = await r.json();
+  if (!j.puntos || !j.fechas) throw new Error("perfiles.json con formato inesperado.");
+  const LA = [...new Set(j.puntos.map(p => p.lat))].sort((a, b) => a - b);
+  const LO = [...new Set(j.puntos.map(p => p.lon))].sort((a, b) => a - b);
+  const m = new Map(j.puntos.map(p => [p.lat + "," + p.lon, p.p]));
+  const cells = G.cells.map(c => {
+    const a = vecino(LA, c.lat), b = vecino(LO, c.lon);
+    const s = (a.d <= 0.25 && b.d <= 0.25) ? m.get(LA[a.i] + "," + LO[b.i]) : null;
+    return j.fechas.map((f, t) => {
+      const v = s && s[t]; if (!v || !isNum(v[1])) return null;
+      return { mld: v[0], zt: v[1], g: v[2], t50: v[3] };
+    });
+  });
+  return { fechas: j.fechas, cells, generado: j.generado };
+}
+
+
+// prediccion.json y calibracion.json los generan las tareas de GitHub (predecir.py / entrenar.py)
+async function descargarML(onProg) {
+  onProg("Modelo entrenado con lances");
+  if (location.protocol === "file:") throw new Error("Abierto como archivo local: el modelo solo se carga desde el link de GitHub Pages.");
+  const r = await fetch("prediccion.json?t=" + Date.now(), { cache: "no-store" });
+  if (!r.ok) { const e = new Error("Aún no hay modelo: corre la tarea «Entrenar modelo» en GitHub."); e.sinModelo = true; throw e; }
+  const j = await r.json();
+  let cal = null;
+  try { const rc = await fetch("calibracion.json?t=" + Date.now(), { cache: "no-store" }); if (rc.ok) cal = await rc.json(); } catch (e) { /* opcional */ }
+  const LA = [...new Set(j.puntos.map(p => p.lat))].sort((a, b) => a - b);
+  const LO = [...new Set(j.puntos.map(p => p.lon))].sort((a, b) => a - b);
+  const m = new Map(j.puntos.map(p => [p.lat + "," + p.lon, p.p]));
+  const cells = G.cells.map(c => {
+    const a = vecino(LA, c.lat), b = vecino(LO, c.lon);
+    const s = (a.d <= 0.25 && b.d <= 0.25) ? m.get(LA[a.i] + "," + LO[b.i]) : null;
+    return j.fechas.map((f, t) => (s && isNum(s[t])) ? s[t] : NaN);
+  });
+  return { fechas: j.fechas, cells, generado: j.generado, modelo: j.modelo || {}, cal };
+}
+function renderSugerenciaML() {
+  const el = document.getElementById("mlSug");
+  const cal = DATA && DATA.ml && DATA.ml.cal, sg = cal && cal.sugerencias;
+  if (!sg || !isNum(sg.tsm_min)) { el.hidden = true; return; }
+  el.hidden = false;
+  el.innerHTML = `Según el modelo entrenado con ${cal.lances} lances (${cal.periodo[0].slice(0, 4)}–${cal.periodo[1].slice(0, 4)}), el 80% de los lances con jurel tuvo TSM entre <b>${sg.tsm_min.toFixed(1)} y ${sg.tsm_max.toFixed(1)} °C</b>, termoclina mediana ${f0(sg.termoclina_mediana)} m, clorofila mediana ${isNum(sg.chl_mediana) ? sg.chl_mediana.toFixed(2) : "–"} mg/m³ y distancia mediana ${f0(sg.dist_mediana)} mn. AUC del modelo con validación por año: <b>${cal.auc_validacion.toFixed(2)}</b>. <button class="btn ghost small" id="btnAplicarML" type="button">Usar esta ventana y distancia</button>`;
+  document.getElementById("btnAplicarML").addEventListener("click", () => {
+    document.getElementById("tMin").value = sg.tsm_min.toFixed(1); document.getElementById("tMax").value = sg.tsm_max.toFixed(1);
+    document.getElementById("nino").value = 0; if (isNum(sg.dist_mediana)) document.getElementById("distTip").value = Math.round(sg.dist_mediana);
+    guardarYRecalcular();
+  });
+}
+
+async function descargarRTOFS(onProg) {
+  let ultimoError = null;
+  for (const cand of ERDDAP.rtofs) {
+    onProg("Perfiles de temperatura 0–200 m (RTOFS)");
+    const lo1 = GRID.lonMin + (cand.lon360 ? 360 : 0), lo2 = GRID.lonMax + (cand.lon360 ? 360 : 0);
+    const q = `temperature[0:2:last][(0.0):2:(200.0)][(${GRID.latMin}):5:(${GRID.latMax})][(${lo1}):5:(${lo2})]`;
+    try {
+      const tb = tabla(await jsonp(erddapURL(cand.base, q)));
+      return procesarRTOFS(tb, cand.lon360);
+    } catch (e) { ultimoError = e; }
+  }
+  throw ultimoError || new Error("sin datos");
+}
+function procesarRTOFS(tb, lon360) {
+  // agrupa: fecha -> "lat,lon" -> [[z, T], ...]
+  const porFecha = new Map(), lats = new Set(), lons = new Set();
+  for (const row of tb.rows) {
+    const T = row[tb.iV]; if (!isNum(T)) continue;
+    const f = String(row[tb.iT]).slice(0, 10), la = +(+row[tb.iLat]).toFixed(3);
+    let lo = +row[tb.iLon]; if (lon360 || lo > 180) lo -= 360; lo = +lo.toFixed(3);
+    const z = Math.abs(+row[tb.iZ]);
+    lats.add(la); lons.add(lo);
+    if (!porFecha.has(f)) porFecha.set(f, new Map());
+    const m = porFecha.get(f), k = la + "," + lo;
+    if (!m.has(k)) m.set(k, []);
+    m.get(k).push([z, T]);
+  }
+  if (!porFecha.size) throw new Error("sin perfiles válidos");
+  const LA = [...lats].sort((a, b) => a - b), LO = [...lons].sort((a, b) => a - b);
+  const fechas = [...porFecha.keys()].sort();
+  const cells = G.cells.map(c => {
+    const a = vecino(LA, c.lat), b = vecino(LO, c.lon);
+    if (a.d > 0.35 || b.d > 0.35) return fechas.map(() => null);
+    const k = LA[a.i] + "," + LO[b.i];
+    return fechas.map(f => { const p = porFecha.get(f).get(k); return p ? perfil(p) : null; });
+  });
+  return { fechas, cells };
+}
+// del perfil T(z): capa de mezcla, termoclina, intensidad y T a 50 m
+function perfil(p) {
+  p.sort((a, b) => a[0] - b[0]);
+  if (p.length < 4) return null;
+  const T0 = p[0][1];
+  let mld = NaN;
+  for (let i = 1; i < p.length; i++) if (p[i][1] < T0 - 0.5) {
+    const [z1, t1] = p[i - 1], [z2, t2] = p[i];
+    mld = z1 + (z2 - z1) * ((T0 - 0.5) - t1) / (t2 - t1); break;
+  }
+  let gmax = 0, zt = NaN;
+  for (let i = 1; i < p.length; i++) {
+    const dz = p[i][0] - p[i - 1][0]; if (dz <= 0) continue;
+    const zm = (p[i][0] + p[i - 1][0]) / 2; if (zm < 5) continue;
+    const g = (p[i - 1][1] - p[i][1]) / dz;
+    if (g > gmax) { gmax = g; zt = zm; }
+  }
+  let t50 = NaN;
+  for (let i = 1; i < p.length; i++) if (p[i - 1][0] <= 50 && p[i][0] >= 50) {
+    const [z1, a] = p[i - 1], [z2, b] = p[i]; t50 = z2 === z1 ? a : a + (b - a) * (50 - z1) / (z2 - z1); break;
+  }
+  if (!isNum(mld)) mld = p[p.length - 1][0];
+  return { mld: r2(mld), zt: r2(zt), g: r2(gmax * 100) / 100, t50: r2(t50) };
+}
+
+async function descargarChl(onProg) {
+  onProg("Clorofila satelital (VIIRS)");
+  let mejor = null, err = null;
+  for (const base of ERDDAP.chl) {
+    const q = `chlor_a[(last)][(0.0)][(${GRID.latMax}):5:(${GRID.latMin})][(${GRID.lonMin}):5:(${GRID.lonMax})]`;
+    try {
+      const tb = tabla(await jsonp(erddapURL(base, q), 60000));
+      const r = procesarCampo(tb);
+      if (!mejor || r.fecha > mejor.fecha) mejor = r;
+      if (diasEntre(r.fecha, hoyLocal()) <= 5) break;     // suficientemente reciente
+    } catch (e) { err = e; }
+  }
+  if (!mejor) throw err || new Error("sin datos");
+  return mejor;
+}
+function procesarCampo(tb) {
+  const lats = new Set(), lons = new Set(), m = new Map();
+  let fecha = "";
+  for (const row of tb.rows) {
+    const v = row[tb.iV], la = +(+row[tb.iLat]).toFixed(3), lo = +(+row[tb.iLon]).toFixed(3);
+    lats.add(la); lons.add(lo);
+    if (tb.iT >= 0) fecha = String(row[tb.iT]).slice(0, 10);
+    if (isNum(v)) m.set(la + "," + lo, v);
+  }
+  const LA = [...lats].sort((a, b) => a - b), LO = [...lons].sort((a, b) => a - b);
+  const vals = G.cells.map(c => {
+    const a = vecino(LA, c.lat), b = vecino(LO, c.lon);
+    if (a.d > 0.35 || b.d > 0.35) return null;
+    const v = m.get(LA[a.i] + "," + LO[b.i]); return isNum(v) ? r2(v) : null;
+  });
+  return { fecha, vals };
+}
+async function descargarBati(onProg) {
+  const c = store.get(BATI_KEY);
+  if (c && c.n === G.cells.length) return c;
+  onProg("Batimetría ETOPO");
+  const q = `altitude[(${GRID.latMin}):24:(${GRID.latMax})][(${GRID.lonMin}):24:(${GRID.lonMax})]`;
+  const r = procesarCampo(tabla(await jsonp(erddapURL(ERDDAP.bati, q), 60000)));
+  const out = { n: G.cells.length, vals: r.vals };
+  store.set(BATI_KEY, out);
+  return out;
+}
+
+// ================================================================== orquestación
+async function descargarTodo(onProg) {
+  const fuentes = {};
+  const marca = (k, nombre, ok, fecha, det) => { fuentes[k] = { nombre, ok, fecha: fecha || "", det: det || "" }; };
+  const marino = await descargarMarino(onProg);         // imprescindible
+  marca("marino", "TSM, olas y corrientes · Copernicus (Open-Meteo)", true, marino.fechas[marino.fechas.length - 1], "pronóstico a 8 días");
+  let viento = null;
+  try { viento = await descargarViento(onProg); marca("viento", "Viento 10 m · " + viento.modelo, true, viento.fechas[viento.fechas.length - 1]); }
+  catch (e) { marca("viento", "Viento 10 m · ECMWF", false, "", e.message); }
+  // El servidor público de la NOAA dejó de actualizar RTOFS 3D (último dato 2024). Se deja apagado hasta
+  // conectar los perfiles de Copernicus; los factores que dependen de él quedan neutros.
+  let rtofs = null;
+  const NOMBRE_P = "Termoclina y T 50 m · Copernicus (perfiles diarios)";
+  try {
+    rtofs = await descargarPerfiles(onProg);
+    const atraso = diasEntre(rtofs.generado.slice(0, 10), hoyLocal());
+    marca("rtofs", NOMBRE_P, atraso <= 2, rtofs.fechas[rtofs.fechas.length - 1],
+      atraso <= 2 ? `calculado el ${rtofs.generado.slice(0, 10)}, ${rtofs.fechas.length} días de pronóstico`
+                  : `el archivo tiene ${atraso} días: revisa en GitHub que la tarea diaria esté corriendo`);
+  } catch (e) { marca("rtofs", NOMBRE_P, false, "", e.message); }
+  let ml = null;
+  try {
+    ml = await descargarML(onProg);
+    const md = ml.modelo || {};
+    marca("ml", "Modelo ML · entrenado con lances de la flota", diasEntre(ml.generado.slice(0, 10), hoyLocal()) <= 2, ml.fechas[ml.fechas.length - 1],
+      `${md.lances || "?"} lances, AUC ${isNum(md.auc_validacion) ? md.auc_validacion.toFixed(2) : "?"} con validación por año · predicción del ${ml.generado.slice(0, 10)}`);
+  } catch (e) { marca("ml", "Modelo ML · entrenado con lances de la flota", e.sinModelo ? null : false, "", e.message); }
+  let chl = null;
+  try {
+    chl = await descargarChl(onProg);
+    const atraso = diasEntre(chl.fecha, hoyLocal());
+    marca("chl", "Clorofila · VIIRS gap-filled (ERDDAP)", atraso <= 15, chl.fecha, atraso > 15 ? `dato de hace ${atraso} días: se usa con precaución` : `imagen de hace ${atraso} día(s)`);
+    chl.atraso = atraso;
+  } catch (e) { marca("chl", "Clorofila · VIIRS gap-filled (ERDDAP)", false, "", e.message); }
+  let bati = null;
+  try { bati = await descargarBati(onProg); marca("bati", "Batimetría · ETOPO (ERDDAP)", true, "fija"); }
+  catch (e) { marca("bati", "Batimetría · ETOPO (ERDDAP)", false, "", e.message + ". Se usa solo la distancia a la costa."); }
+  return { fetched: new Date().toISOString(), n: G.cells.length, marino, viento, rtofs, chl, bati, ml, fuentes };
+}
+
+// ================================================================== presión de pesca (lances del usuario)
+function parseCoord(s) {
+  s = String(s).trim().replace(",", ".");
+  const m = s.match(/^(-?\d+(?:\.\d+)?)\s*[°º]\s*(\d+(?:\.\d+)?)?/);
+  const v = m ? Math.abs(+m[1]) + (m[2] ? +m[2] / 60 : 0) : Math.abs(parseFloat(s));
+  return isNum(v) ? -v : NaN;                    // hemisferio sur / oeste
+}
+function parseFecha(s) {
+  s = String(s).trim();
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/); if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+  m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/);
+  if (m) { const y = m[3].length === 2 ? "20" + m[3] : m[3]; return `${y}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`; }
+  return "";
+}
+function leerCSV(texto) {
+  const lineas = texto.replace(/\r/g, "").split("\n").filter(l => l.trim());
+  if (lineas.length < 2) throw new Error("El archivo no tiene filas de datos.");
+  const sep = (lineas[0].match(/;/g) || []).length > (lineas[0].match(/,/g) || []).length ? ";" : (lineas[0].includes("\t") ? "\t" : ",");
+  const cab = lineas[0].split(sep).map(s => s.trim().toLowerCase().replace(/"/g, ""));
+  const ix = n => cab.findIndex(c => c === n || c.startsWith(n));
+  const iF = ix("fecha"), iLa = ix("lat"), iLo = ix("lon"), iC = ix("captura"), iE = ix("especie");
+  if (iF < 0 || iLa < 0 || iLo < 0) throw new Error("Faltan columnas. Se esperan: fecha, lat, lon, captura_t.");
+  const out = [];
+  for (const l of lineas.slice(1)) {
+    const p = l.split(sep).map(s => s.trim().replace(/"/g, ""));
+    const f = parseFecha(p[iF]), la = parseCoord(p[iLa]), lo = parseCoord(p[iLo]);
+    const c = iC >= 0 ? parseFloat(String(p[iC]).replace(",", ".")) : 0;
+    const e = iE >= 0 ? String(p[iE] || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : "";
+    if (f && isNum(la) && isNum(lo)) out.push({ f, la, lo, c: isNum(c) ? c : 0, e });
+  }
+  if (!out.length) throw new Error("No se pudo leer ninguna fila válida (revisa fechas y coordenadas).");
+  return out;
+}
+// esfuerzo, captura y éxito ponderados por cercanía (σ 0,35°) y antigüedad (vida media 3 días)
+function presionEn(lat, lon, lances, fechaRef, sig = 0.35) {
+  if (!lances || !lances.length) return null;
+  let E = 0, C = 0, P = 0, E3 = 0;
+  for (const x of lances) {
+    const edad = diasEntre(x.f, fechaRef);
+    if (edad < 1 || edad > 10) continue;
+    const d2 = ((x.la - lat) ** 2 + ((x.lo - lon) * Math.cos(lat * D2R)) ** 2) / (sig * sig);
+    if (d2 > 9) continue;
+    const w = Math.exp(-d2 / 2) * Math.pow(0.5, (edad - 1) / 3);
+    E += w; C += w * x.c; if (x.c > 0) P += w; if (edad <= 3) E3 += Math.exp(-d2 / 2);
+  }
+  return { E, C, exito: E > 0 ? P / E : NaN, E3 };
+}
+
+// ================================================================== cálculo del índice
+function prefs() {
+  const g = id => parseFloat(document.getElementById(id).value);
+  const pesos = {};
+  for (const f of FACTORES) { const v = g("w_" + f.id); pesos[f.id] = isNum(v) && v >= 0 ? v : f.w; }
+  return {
+    tMin: isNum(g("tMin")) ? g("tMin") : 13, tMax: isNum(g("tMax")) ? g("tMax") : 15.5,
+    nino: isNum(g("nino")) ? g("nino") : 0, red: isNum(g("red")) ? g("red") : 120, distTip: g("distTip") > 0 ? g("distTip") : 25, wML: isNum(g("wML")) ? clamp(g("wML"), 0, 100) : 50,
+    port: document.getElementById("port").value || "Coronel", pesos
+  };
+}
+function vientoEnDia(w, fecha) {
+  if (!w) return [];
+  const k = w.fechas.indexOf(fecha);
+  return w.lats.map((lat, i) => {
+    if (k < 0) return { lat, cui3: NaN, relax: NaN, norte72: NaN };
+    const s = w.cui[i];
+    const u3 = [s[k], s[k - 1], s[k - 2]].filter(isNum), u5 = [s[k], s[k - 1], s[k - 2], s[k - 3], s[k - 4]].filter(isNum);
+    const cui3 = u3.length ? mean(u3) : NaN;
+    const n = w.norte[i];
+    return { lat, cui3, relax: u5.length ? Math.max(...u5) - cui3 : NaN, norte72: [n[k], n[k - 1], n[k - 2]].reduce((a, v) => a + (isNum(v) ? v : 0), 0) };
+  });
+}
+function interpLat(arr, lat, campo) {
+  const a = arr.filter(x => isNum(x[campo])).sort((p, q) => p.lat - q.lat);
+  if (!a.length) return NaN;
+  if (lat <= a[0].lat) return a[0][campo];
+  if (lat >= a[a.length - 1].lat) return a[a.length - 1][campo];
+  for (let i = 0; i < a.length - 1; i++) if (lat >= a[i].lat && lat <= a[i + 1].lat)
+    return a[i][campo] + (a[i + 1][campo] - a[i][campo]) * (lat - a[i].lat) / (a[i + 1].lat - a[i].lat);
+  return NaN;
+}
+function dif(a, b, c) {
+  if (isNum(a) && isNum(c)) return (c - a) / 2;
+  if (isNum(c) && isNum(b)) return c - b;
+  if (isNum(a) && isNum(b)) return b - a;
+  return NaN;
+}
+function campoGrilla(vals) {
+  const A = Array.from({ length: G.nR }, () => new Array(G.nC).fill(NaN));
+  G.cells.forEach((c, i) => { const v = vals[i]; A[c.r][c.c] = isNum(v) ? v : NaN; });
+  return A;
+}
+function derivadas(A, r, c) {
+  const lat = GRID.latMin + r * GRID.step;
+  const dx = GRID.step * 111.2e3 * Math.cos(lat * D2R), dy = GRID.step * 111.2e3;   // metros
+  const gx = dif(A[r][c - 1], A[r][c], A[r][c + 1]) / dx;
+  const gy = dif(r > 0 ? A[r - 1][c] : NaN, A[r][c], r < G.nR - 1 ? A[r + 1][c] : NaN) / dy;
+  return [gx, gy];
+}
+function maxVecindad(A, r, c) {
+  let m = NaN;
+  for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) { const v = (A[r + dr] || [])[c + dc]; if (isNum(v)) m = isNum(m) ? Math.max(m, v) : v; }
+  return m;
+}
+function rtofsEnFecha(rt, fecha) {
+  if (!rt) return -1;
+  let b = -1, bd = 99;
+  rt.fechas.forEach((f, i) => { const d = Math.abs(diasEntre(f, fecha)); if (d < bd) { bd = d; b = i; } });
+  return bd <= 3 ? b : -1;
+}
+const NEUTRO = 0.6;
+const HIST_FLOTA = {"lat0":-40.8,"lon0":-79.8,"step":0.4,"nR":20,"nC":20,"meses":[[0,0,0,0,0,0,0,0,0,0,0,0,1,2,2,2,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,5,8,8,5,2,1,0,0,0,0,0,0,0,0,0,0,0,0,1,4,10,15,15,9,4,1,0,0,0,0,0,0,0,0,0,0,0,0,1,4,10,16,16,10,5,2,1,0,0,0,0,0,0,0,0,0,0,0,2,5,12,20,21,14,6,2,1,0,0,0,0,0,0,0,0,0,0,1,3,11,23,33,33,23,10,3,1,0,0,0,0,0,0,0,0,0,0,1,5,15,31,44,45,32,16,5,1,0,0,0,0,0,0,0,0,0,0,1,4,12,27,41,45,34,18,6,1,0,0,0,0,0,0,0,0,0,0,0,2,8,21,35,40,31,16,5,1,0,0,0,0,0,0,0,0,0,0,0,3,11,28,47,54,44,25,10,3,0,0,0,0,0,0,0,0,0,0,1,3,13,34,61,78,70,47,23,8,0,0,0,0,0,0,0,0,0,0,1,3,13,34,64,90,93,74,46,20,0,0,0,0,0,0,0,0,0,0,0,2,10,26,52,80,99,97,70,36,0,0,0,0,0,0,0,0,0,0,0,1,5,14,31,57,87,100,82,48,0,0,0,0,0,0,0,0,0,0,0,0,1,5,14,34,61,81,79,57,0,0,0,0,0,0,0,0,0,0,0,0,0,1,6,20,41,62,72,65,0,0,0,0,0,0,0,0,0,0,0,0,0,1,4,13,29,48,63,64,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,8,19,33,49,56,0,0,0,0,0,0,0,0,0,0,0,0,0,1,4,10,16,22,32,41,0,0,0,0,0,0,0,0,0,0,0,0,0,1,4,10,15,15,18,23],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,2,3,2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,4,6,7,5,2,1,0,0,0,0,0,0,0,0,0,0,0,0,2,5,10,14,14,9,4,1,0,0,0,0,0,0,0,0,0,0,0,1,4,11,20,24,21,13,6,2,0,0,0,0,0,0,0,0,0,0,1,3,10,23,35,37,28,15,6,1,0,0,0,0,0,0,0,0,0,0,1,4,14,30,43,44,31,15,5,1,0,0,0,0,0,0,0,0,0,0,1,3,11,23,35,37,27,14,4,1,0,0,0,0,0,0,0,0,0,0,0,2,7,18,31,35,27,14,5,1,0,0,0,0,0,0,0,0,0,0,0,2,10,25,43,51,42,25,11,3,0,0,0,0,0,0,0,0,0,0,0,3,11,29,53,68,64,47,26,10,0,0,0,0,0,0,0,0,0,0,0,2,10,28,53,78,89,78,51,23,0,0,0,0,0,0,0,0,0,0,0,2,8,22,45,76,100,100,72,36,0,0,0,0,0,0,0,0,0,0,0,1,4,12,29,55,84,96,79,47,0,0,0,0,0,0,0,0,0,0,0,0,1,4,12,30,56,76,76,57,0,0,0,0,0,0,0,0,0,0,0,0,0,1,4,15,34,55,68,63,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,10,25,43,58,59,0,0,0,0,0,0,0,0,0,0,0,0,0,1,3,10,20,32,44,48,0,0,0,0,0,0,0,0,0,0,0,0,0,1,4,10,16,20,28,34,0,0,0,0,0,0,0,0,0,0,0,0,0,1,3,8,12,15,19,23],[0,0,0,0,0,0,0,0,0,0,0,0,1,3,4,4,2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,3,8,11,10,6,3,1,0,0,0,0,0,0,0,0,0,0,0,0,1,4,10,15,14,10,5,2,1,0,0,0,0,0,0,0,0,0,0,0,1,4,11,17,19,15,9,4,1,0,0,0,0,0,0,0,0,0,0,0,1,5,12,19,22,19,11,5,2,0,0,0,0,0,0,0,0,0,0,1,3,9,20,29,30,22,12,5,1,0,0,0,0,0,0,0,0,0,0,1,4,14,28,38,37,25,12,4,1,0,0,0,0,0,0,0,0,0,0,1,4,12,23,32,32,21,10,3,1,0,0,0,0,0,0,0,0,0,0,1,2,7,16,26,29,23,12,4,1,0,0,0,0,0,0,0,0,0,0,0,2,7,19,34,44,38,24,11,3,0,0,0,0,0,0,0,0,0,0,0,2,8,22,43,60,61,46,25,10,0,0,0,0,0,0,0,0,0,0,0,2,8,23,48,76,90,79,50,22,0,0,0,0,0,0,0,0,0,0,0,1,6,19,43,76,100,96,66,32,0,0,0,0,0,0,0,0,0,0,0,1,3,10,26,52,77,85,68,39,0,0,0,0,0,0,0,0,0,0,0,0,1,3,10,26,47,62,61,45,0,0,0,0,0,0,0,0,0,0,0,0,0,1,3,10,24,40,49,45,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,6,15,27,36,36,0,0,0,0,0,0,0,0,0,0,0,0,0,1,3,9,15,21,25,27,0,0,0,0,0,0,0,0,0,0,0,0,0,1,3,9,14,16,19,24,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,5,8,11,17,22],[0,0,0,0,0,0,0,0,0,0,0,1,2,4,7,7,4,2,0,0,0,0,0,0,0,0,0,0,0,0,0,2,6,14,21,19,11,4,1,0,0,0,0,0,0,0,0,0,0,0,0,2,9,20,28,25,15,6,2,1,0,0,0,0,0,0,0,0,0,0,0,2,8,19,28,27,17,7,3,1,0,0,0,0,0,0,0,0,0,0,0,2,8,17,26,26,18,9,3,1,0,0,0,0,0,0,0,0,0,0,1,5,14,29,40,38,26,12,4,1,0,0,0,0,0,0,0,0,0,0,2,8,23,43,59,56,37,17,5,1,0,0,0,0,0,0,0,0,0,0,2,7,21,40,55,55,38,18,6,1,0,0,0,0,0,0,0,0,0,0,1,4,11,25,39,43,34,18,6,2,0,0,0,0,0,0,0,0,0,0,0,2,7,20,39,51,47,30,14,4,0,0,0,0,0,0,0,0,0,0,0,2,7,22,47,69,72,54,29,11,0,0,0,0,0,0,0,0,0,0,0,2,7,22,50,82,96,82,50,21,0,0,0,0,0,0,0,0,0,0,0,1,5,17,43,77,100,95,64,30,0,0,0,0,0,0,0,0,0,0,0,1,3,10,25,50,74,81,64,36,0,0,0,0,0,0,0,0,0,0,1,2,7,12,15,25,44,59,58,43,0,0,0,0,0,0,0,0,0,0,1,3,10,16,17,14,21,36,46,42,0,0,0,0,0,0,0,0,0,0,1,2,7,13,15,12,12,20,30,33,0,0,0,0,0,0,0,0,0,0,0,1,3,7,10,11,13,15,20,26,0,0,0,0,0,0,0,0,0,0,0,0,1,3,5,9,13,16,21,29,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,5,9,13,20,27],[0,0,0,0,0,0,0,0,0,0,0,1,3,6,9,9,6,2,1,0,0,0,0,0,0,0,0,0,0,0,0,2,7,16,23,22,14,6,2,0,0,0,0,0,0,0,0,0,0,0,1,2,10,23,34,33,20,8,2,1,0,0,0,0,0,0,0,0,0,0,0,3,10,24,36,34,20,8,2,1,0,0,0,0,0,0,0,0,0,0,1,3,11,25,38,37,24,9,3,1,0,0,0,0,0,0,0,0,0,0,1,6,21,43,60,59,39,17,5,1,0,0,0,0,0,0,0,0,0,0,2,10,31,61,84,82,56,26,8,2,0,0,0,0,0,0,0,0,0,0,2,9,27,54,77,78,56,27,9,2,0,0,0,0,0,0,0,0,0,0,1,5,15,34,54,60,48,26,10,3,0,0,0,0,0,0,0,0,0,0,1,3,10,27,52,69,65,44,22,7,0,0,0,0,0,0,0,0,0,0,1,2,9,26,57,86,91,70,40,16,0,0,0,0,0,0,0,0,0,0,0,2,6,20,50,84,100,86,54,23,0,0,0,0,0,0,0,0,0,0,0,1,3,12,35,65,87,84,58,28,0,0,0,0,0,0,0,0,0,0,0,2,5,10,19,39,60,69,60,39,0,0,0,0,0,0,0,0,0,0,1,4,13,22,23,24,39,60,68,57,0,0,0,0,0,0,0,0,0,0,1,6,18,30,31,23,25,45,63,60,0,0,0,0,0,0,0,0,0,0,1,4,13,23,27,21,15,26,43,48,0,0,0,0,0,0,0,0,0,0,0,2,6,13,17,16,14,18,29,38,0,0,0,0,0,0,0,0,0,0,0,1,2,5,7,10,14,19,27,37,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,5,11,18,26,35],[0,0,0,0,0,0,0,0,0,0,2,10,27,47,55,45,25,9,2,0,0,0,0,0,0,0,0,0,0,0,2,8,25,47,61,54,34,14,4,1,0,0,0,0,0,0,0,0,0,0,1,6,21,45,64,63,42,18,5,1,0,0,0,0,0,0,0,0,0,0,1,5,18,41,62,64,43,19,5,1,0,0,0,0,0,0,0,0,0,1,2,6,18,41,63,66,46,21,6,2,0,0,0,0,0,0,0,0,0,2,4,10,27,57,84,85,59,28,8,2,0,0,0,0,0,0,0,0,0,2,4,12,34,70,100,99,68,32,10,2,0,0,0,0,0,0,0,0,0,1,2,8,27,57,83,85,61,30,10,2,0,0,0,0,0,0,0,0,0,0,1,4,14,34,55,64,51,29,12,3,0,0,0,0,0,0,0,0,0,0,1,3,10,27,53,71,68,48,26,9,0,0,0,0,0,0,0,0,0,0,1,2,8,26,55,83,91,74,44,18,0,0,0,0,0,0,0,0,0,0,0,1,5,18,44,77,96,89,59,26,0,0,0,0,0,0,0,0,0,0,0,1,3,10,29,59,84,86,62,32,0,0,0,0,0,0,0,0,0,0,0,1,4,8,18,37,61,73,68,47,0,0,0,0,0,0,0,0,0,0,1,4,11,19,22,26,45,71,85,73,0,0,0,0,0,0,0,0,0,0,1,5,15,26,28,22,30,56,77,73,0,0,0,0,0,0,0,0,0,0,1,3,11,20,24,19,16,30,48,53,0,0,0,0,0,0,0,0,0,0,0,2,5,11,15,14,12,19,36,51,0,0,0,0,0,0,0,0,0,0,0,1,2,4,6,8,13,20,35,53,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,4,9,17,29,46],[0,0,0,0,0,0,0,0,0,1,4,18,48,82,96,78,43,16,4,1,0,0,0,0,0,0,0,0,0,1,3,15,44,80,100,88,53,22,6,1,0,0,0,0,0,0,0,0,0,0,2,10,34,71,100,96,64,29,8,2,0,0,0,0,0,0,0,0,0,0,2,7,27,62,92,94,65,31,9,2,0,0,0,0,0,0,0,0,0,1,4,8,23,51,80,86,63,32,11,2,0,0,0,0,0,0,0,0,1,3,8,15,30,61,93,98,71,35,11,2,0,0,0,0,0,0,0,0,1,3,7,15,32,66,97,98,67,32,10,2,0,0,0,0,0,0,0,0,0,1,3,8,22,47,69,70,49,24,8,2,0,0,0,0,0,0,0,0,0,0,1,3,10,24,40,46,37,21,8,3,0,0,0,0,0,0,0,0,0,0,0,1,6,19,37,48,43,30,17,6,0,0,0,0,0,0,0,0,0,0,0,1,5,16,34,50,56,50,34,14,0,0,0,0,0,0,0,0,0,0,0,1,3,11,30,57,80,80,56,25,0,0,0,0,0,0,0,0,0,0,0,0,2,9,29,61,88,90,65,33,0,0,0,0,0,0,0,0,0,0,0,0,2,7,21,44,69,81,71,48,0,0,0,0,0,0,0,0,0,0,0,0,1,4,13,28,51,73,79,63,0,0,0,0,0,0,0,0,0,0,0,0,1,2,6,13,28,48,62,57,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,3,10,23,38,46,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,6,19,42,64,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,6,19,43,70,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,4,11,28,51],[0,0,0,0,0,0,0,0,0,1,4,16,45,79,93,75,41,14,3,1,0,0,0,0,0,0,0,0,0,1,3,13,41,77,98,86,52,20,5,1,0,0,0,0,0,0,0,0,0,0,2,9,33,71,100,96,63,27,7,1,0,0,0,0,0,0,0,0,0,0,2,7,27,62,94,95,66,31,9,2,0,0,0,0,0,0,0,0,0,1,3,7,20,47,76,84,64,33,11,2,0,0,0,0,0,0,0,0,1,3,6,12,25,53,85,94,71,37,12,3,0,0,0,0,0,0,0,0,1,2,6,12,26,56,85,88,62,30,9,2,0,0,0,0,0,0,0,0,0,1,3,7,18,38,55,54,36,17,6,1,0,0,0,0,0,0,0,0,0,0,1,3,8,17,26,28,21,12,5,1,0,0,0,0,0,0,0,0,0,0,0,1,5,12,23,30,25,16,9,3,0,0,0,0,0,0,0,0,0,0,0,1,4,12,24,36,42,39,26,11,0,0,0,0,0,0,0,0,0,0,0,1,3,10,28,57,84,85,57,23,0,0,0,0,0,0,0,0,0,0,0,0,2,10,32,67,96,95,65,31,0,0,0,0,0,0,0,0,0,0,0,0,2,8,24,47,69,79,71,47,0,0,0,0,0,0,0,0,0,0,0,0,2,6,15,30,49,68,69,50,0,0,0,0,0,0,0,0,0,0,0,0,1,3,6,12,23,36,43,42,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,3,8,19,38,53,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,3,8,23,50,76,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,3,10,24,49,80,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,6,14,29,51],[0,0,0,0,0,0,0,0,0,0,1,4,11,22,29,25,14,6,2,0,0,0,0,0,0,0,0,0,0,0,1,4,13,31,44,38,20,8,3,1,0,0,0,0,0,0,0,0,0,0,1,5,17,43,56,39,15,5,2,1,0,0,0,0,0,0,0,0,0,0,1,5,20,46,56,37,15,4,2,1,0,0,0,0,0,0,0,0,0,0,1,5,19,45,60,47,22,7,3,2,0,0,0,0,0,0,0,0,0,0,1,7,25,58,87,82,47,17,6,2,0,0,0,0,0,0,0,0,0,0,2,9,29,65,95,93,60,26,8,2,0,0,0,0,0,0,0,0,0,0,2,7,22,46,62,56,34,15,5,1,0,0,0,0,0,0,0,0,0,0,1,3,9,17,21,18,12,7,3,1,0,0,0,0,0,0,0,0,0,0,0,1,3,6,10,13,13,11,7,3,0,0,0,0,0,0,0,0,0,0,0,0,2,8,17,29,39,38,24,9,0,0,0,0,0,0,0,0,0,0,0,0,2,10,30,65,93,87,53,20,0,0,0,0,0,0,0,0,0,0,0,0,2,9,33,73,100,91,57,27,0,0,0,0,0,0,0,0,0,0,0,0,2,7,22,44,61,67,62,43,0,0,0,0,0,0,0,0,0,0,0,0,2,6,15,25,38,57,63,47,0,0,0,0,0,0,0,0,0,0,0,0,1,3,7,11,17,30,41,42,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,3,7,19,44,63,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,3,8,22,49,76,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,4,10,22,43,72,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,3,7,13,25,43],[0,0,0,0,0,0,0,0,0,0,0,1,2,3,5,4,3,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,5,11,14,11,5,2,1,0,0,0,0,0,0,0,0,0,0,0,1,3,9,20,21,12,4,1,1,0,0,0,0,0,0,0,0,0,0,0,1,3,13,26,26,15,5,1,1,1,0,0,0,0,0,0,0,0,0,0,1,4,15,31,33,20,7,2,1,1,0,0,0,0,0,0,0,0,0,0,1,7,24,51,64,46,18,4,1,1,0,0,0,0,0,0,0,0,0,0,2,10,36,74,100,90,51,17,5,1,0,0,0,0,0,0,0,0,0,0,1,9,32,70,97,92,59,23,6,1,0,0,0,0,0,0,0,0,0,0,1,5,17,42,63,61,39,15,4,1,0,0,0,0,0,0,0,0,0,0,1,3,11,28,45,45,28,12,4,1,0,0,0,0,0,0,0,0,0,0,1,3,12,30,46,46,29,13,5,2,0,0,0,0,0,0,0,0,0,0,1,3,11,26,39,42,33,20,9,4,0,0,0,0,0,0,0,0,0,0,0,2,6,16,29,41,46,37,20,8,0,0,0,0,0,0,0,0,0,0,0,1,3,8,20,40,55,50,30,12,0,0,0,0,0,0,0,0,0,0,0,0,1,3,12,30,48,50,36,20,0,0,0,0,0,0,0,0,0,0,0,0,0,1,6,17,34,48,50,37,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,9,26,53,70,60,0,0,0,0,0,0,0,0,0,0,0,0,0,1,4,10,28,59,80,71,0,0,0,0,0,0,0,0,0,0,0,0,1,2,6,13,26,51,68,64,0,0,0,0,0,0,0,0,0,0,0,0,1,2,6,12,18,29,43,48],[0,0,0,0,0,0,0,0,0,0,0,1,2,3,5,5,3,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,5,11,16,14,7,3,1,0,0,0,0,0,0,0,0,0,0,0,1,3,9,19,25,17,6,2,1,0,0,0,0,0,0,0,0,0,0,0,1,3,9,19,21,12,4,1,0,0,0,0,0,0,0,0,0,0,0,0,1,3,9,17,18,10,3,1,0,0,0,0,0,0,0,0,0,0,0,0,1,5,17,33,40,28,11,2,1,0,0,0,0,0,0,0,0,0,0,0,1,8,27,53,71,64,38,13,3,1,0,0,0,0,0,0,0,0,0,0,1,7,26,54,76,73,47,20,5,1,0,0,0,0,0,0,0,0,0,0,1,4,15,36,55,55,37,16,4,1,0,0,0,0,0,0,0,0,0,0,0,3,11,30,50,57,44,23,8,2,0,0,0,0,0,0,0,0,0,0,1,3,13,36,64,80,69,40,16,5,0,0,0,0,0,0,0,0,0,0,1,3,13,36,69,95,92,63,32,12,0,0,0,0,0,0,0,0,0,0,0,2,8,26,56,87,100,86,54,24,0,0,0,0,0,0,0,0,0,0,0,1,4,14,35,65,89,90,64,32,0,0,0,0,0,0,0,0,0,0,0,0,1,5,18,42,69,79,64,35,0,0,0,0,0,0,0,0,0,0,0,0,0,2,10,27,51,65,61,42,0,0,0,0,0,0,0,0,0,0,0,0,0,1,5,16,34,54,65,56,0,0,0,0,0,0,0,0,0,0,0,0,0,1,3,9,25,50,67,61,0,0,0,0,0,0,0,0,0,0,0,0,0,2,5,11,22,41,56,54,0,0,0,0,0,0,0,0,0,0,0,0,0,2,5,10,15,24,36,43],[0,0,0,0,0,0,0,0,0,0,0,0,1,3,4,4,2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,4,9,13,13,8,3,1,0,0,0,0,0,0,0,0,0,0,0,0,2,7,15,22,21,11,4,1,0,0,0,0,0,0,0,0,0,0,0,0,2,6,15,20,16,7,2,1,0,0,0,0,0,0,0,0,0,0,0,0,2,6,12,15,11,4,1,0,0,0,0,0,0,0,0,0,0,0,0,1,4,11,20,26,21,10,3,1,0,0,0,0,0,0,0,0,0,0,0,1,5,16,31,42,40,26,11,3,1,0,0,0,0,0,0,0,0,0,0,1,4,14,31,44,45,32,16,4,1,0,0,0,0,0,0,0,0,0,0,0,2,9,23,37,40,30,15,4,1,0,0,0,0,0,0,0,0,0,0,0,2,10,26,44,52,42,24,9,2,0,0,0,0,0,0,0,0,0,0,0,3,12,33,61,79,72,46,20,6,0,0,0,0,0,0,0,0,0,0,1,3,13,35,68,96,96,71,39,16,0,0,0,0,0,0,0,0,0,0,0,2,9,27,55,85,100,91,62,30,0,0,0,0,0,0,0,0,0,0,0,1,4,14,33,59,85,92,72,40,0,0,0,0,0,0,0,0,0,0,0,0,1,5,16,36,62,77,68,45,0,0,0,0,0,0,0,0,0,0,0,0,0,2,8,23,44,59,60,49,0,0,0,0,0,0,0,0,0,0,0,0,0,1,5,14,29,44,54,52,0,0,0,0,0,0,0,0,0,0,0,0,0,1,3,8,18,32,46,49,0,0,0,0,0,0,0,0,0,0,0,0,0,1,4,8,15,24,34,39,0,0,0,0,0,0,0,0,0,0,0,0,0,1,4,9,13,15,20,25]]};
+function histEn(c, fecha) {
+  const m = Number(fecha.slice(5, 7)) - 1, H = HIST_FLOTA;
+  const r = Math.round((c.lat - H.lat0) / H.step), k = Math.round((c.lon - H.lon0) / H.step);
+  if (r < 0 || r >= H.nR || k < 0 || k >= H.nC) return NaN;
+  return H.meses[m][r * H.nC + k] / 100;
+}
+
+const lancesJurel = () => LANCES.filter(x => !x.e || x.e.includes("jurel"));
+function calcularDia(data, di, lances) {
+  lances = lances === LANCES ? lancesJurel() : lances;
+  const p = prefs(), lo = p.tMin + p.nino, hi = p.tMax + p.nino;
+  const M = data.marino, fecha = M.fechas[di];
+  // campos 2D del día
+  const SST = campoGrilla(M.cells.map(c => c.sst[di]));
+  const U = campoGrilla(M.cells.map(c => c.u[di])), V = campoGrilla(M.cells.map(c => c.v[di]));
+  const chlLog = data.chl ? campoGrilla(data.chl.vals.map(v => isNum(v) ? Math.log10(Math.max(v, 0.01)) : NaN)) : null;
+  const GR = Array.from({ length: G.nR }, () => new Array(G.nC).fill(NaN));
+  const GC = Array.from({ length: G.nR }, () => new Array(G.nC).fill(NaN));
+  for (const c of G.cells) {
+    const [gx, gy] = derivadas(SST, c.r, c.c);
+    if (isNum(gx) || isNum(gy)) GR[c.r][c.c] = Math.hypot(isNum(gx) ? gx : 0, isNum(gy) ? gy : 0) * 1000;   // °C/km
+    if (chlLog) { const [cx, cy] = derivadas(chlLog, c.r, c.c); if (isNum(cx) || isNum(cy)) GC[c.r][c.c] = Math.hypot(isNum(cx) ? cx : 0, isNum(cy) ? cy : 0) * 1000; }
+  }
+  const vd = vientoEnDia(data.viento, fecha);
+  const ri = rtofsEnFecha(data.rtofs, fecha);
+  const di3 = Math.max(0, di - 3);
+  const hoy = hoyLocal(), fRefLances = fecha > hoy ? hoy : fecha;
+  const sumaP = Object.values(p.pesos).reduce((a, b) => a + b, 0) || 1;
+
+  const celdas = G.cells.map((c, i) => {
+    const s = SST[c.r][c.c];
+    const pr = ri >= 0 ? data.rtofs.cells[i][ri] : null;
+    const prof = data.bati ? data.bati.vals[i] : null;      // altitud (negativa = profundidad)
+    if (isNum(prof) && prof > -5) return null;               // tierra
+    const chl = data.chl ? data.chl.vals[i] : null;
+    const olaV = M.cells[i].olaV[di], ola = M.cells[i].ola[di];
+    // 1. térmico (superficie + 50 m)
+    const suit = t => { const fu = Math.max(0, lo - t, t - hi); return Math.exp(-(fu * fu) / (2 * 0.8 * 0.8)); };
+    const lo50 = lo - 1.5, hi50 = hi - 1.0;                  // a 50 m el agua es más fría
+    const suit50 = t => { const fu = Math.max(0, lo50 - t, t - hi50); return Math.exp(-(fu * fu) / (2 * 0.8 * 0.8)); };
+    let termico = NEUTRO;
+    if (isNum(s) && pr && isNum(pr.t50)) termico = 0.6 * suit(s) + 0.4 * suit50(pr.t50);
+    else if (isNum(s)) termico = suit(s);
+    // 2. termoclina y profundidad del cardumen
+    let termoclina = NEUTRO, zCard = NaN;
+    if (pr && isNum(pr.zt)) {
+      const prof_ok = pr.zt <= 80 ? (pr.zt >= 15 ? 1 : 0.7) : Math.exp(-(((pr.zt - 80) / 50) ** 2));
+      const fuerza = 0.5 + 0.5 * clamp(pr.g / 0.08, 0, 1);
+      zCard = clamp(0.5 * ((isNum(pr.mld) ? pr.mld : pr.zt) + pr.zt), 10, 250);
+      const alcance = zCard <= p.red ? 1 : Math.exp(-(((zCard - p.red) / 40) ** 2));
+      termoclina = clamp(prof_ok * fuerza * alcance, 0.03, 1);
+    }
+    // 3. alimento
+    let alimento = NEUTRO;
+    if (isNum(chl)) {
+      const lg = Math.log10(Math.max(chl, 0.01)), opt = Math.exp(-((lg - Math.log10(0.8)) ** 2) / (2 * 0.45 * 0.45));
+      const borde = 1 - Math.exp(-(maxVecindad(GC, c.r, c.c) || 0) / 0.004);
+      alimento = clamp(0.7 * opt + 0.3 * borde, 0.03, 1);
+      if (data.chl.atraso > 15) alimento = 0.5 * alimento + 0.5 * NEUTRO;
+    }
+    // 4. frente térmico
+    const gr = maxVecindad(GR, c.r, c.c);
+    const frenteS = isNum(gr) ? clamp(1 - Math.exp(-gr / 0.006), 0.05, 1) : 0.4;
+    // 7. convergencia de corrientes
+    const [ux] = derivadas(U, c.r, c.c), [, vy] = derivadas(V, c.r, c.c);
+    const div = (isNum(ux) ? ux : 0) + (isNum(vy) ? vy : 0);
+    const convergencia = (isNum(ux) || isNum(vy)) ? clamp(0.6 + 0.4 * Math.tanh(-div / 3e-6), 0.1, 1) : NEUTRO;
+    // 8. surgencia-relajación
+    const relax = interpLat(vd, c.lat, "relax");
+    const surgencia = clamp(0.55 + 0.45 * clamp((isNum(relax) ? relax : 0) / 150, 0, 1) * Math.exp(-c.distKm / 200), 0, 1);
+    // 9. fondo y distancia
+    const ld = Math.log(Math.max(c.distKm, 5)) - Math.log(p.distTip * 1.852);
+    let fondo = Math.max(0.15, Math.exp(-(ld * ld) / (2 * 0.6 * 0.6)));
+    if (isNum(prof)) { const z = -prof; fondo *= z < 50 ? 0.7 : z > 3000 ? 0.9 : 1; fondo = clamp(fondo, 0.1, 1); }
+    const hv = histEn(c, fecha), historial = isNum(hv) ? 0.3 + 0.7 * hv : NEUTRO;
+    // 6. evidencia de pesca y 5. cohesión / dispersión
+    const pres = presionEn(c.lat, c.lon, lances, fRefLances);
+    let presion = NEUTRO, presDisp = 0;
+    if (pres && pres.E > 0.05) {
+      const conf = clamp(pres.E / 2, 0, 1);
+      const evid = clamp(0.35 + 0.65 * (1 - Math.exp(-pres.C / 80)), 0, 1);
+      const agot = (1 - (isNum(pres.exito) ? pres.exito : 0)) * clamp(pres.E / 4, 0, 1);
+      presion = clamp(NEUTRO + conf * (evid - NEUTRO) - 0.3 * agot, 0.05, 1);
+      presDisp = clamp(pres.E3 / 6, 0, 1);
+    }
+    const partes = [];
+    if (isNum(olaV)) partes.push([0.30, clamp(olaV / 2.5, 0, 1)]);
+    if (pr && isNum(pr.mld)) partes.push([0.20, clamp((pr.mld - 20) / 60, 0, 1)]);
+    partes.push([0.15, 1 - frenteS]);
+    if (isNum(s)) partes.push([0.15, clamp((s - hi) / 2, 0, 1)]);
+    if (pres) partes.push([0.20, presDisp]);
+    const wsum = partes.reduce((a, x) => a + x[0], 0);
+    const dispersion = wsum ? partes.reduce((a, x) => a + x[0] * x[1], 0) / wsum : NaN;
+    const cohesion = isNum(dispersion) ? clamp(1 - 0.85 * dispersion, 0.05, 1) : NEUTRO;
+
+    const comp = { termico, termoclina, alimento, frente: frenteS, cohesion, presion, convergencia, surgencia, fondo, historial };
+    let lg = 0;
+    for (const f of FACTORES) lg += p.pesos[f.id] * Math.log(clamp(comp[f.id], 0.03, 1));
+    const indiceExp = Math.round(Math.exp(lg / sumaP) * 100);
+    const tml = data.ml ? data.ml.fechas.indexOf(fecha) : -1, pml = tml >= 0 ? data.ml.cells[i][tml] : NaN;
+    const score = isNum(pml) && p.wML > 0 ? Math.round((1 - p.wML / 100) * indiceExp + p.wML * pml) : indiceExp;
+    const s3 = M.cells[i].sst[di3];
+    return {
+      ...c, score, indiceExp, pml: isNum(pml) ? Math.round(pml * 100) : NaN, comp, sst: s, grad: gr, ola, olaV, chl, prof: isNum(prof) ? -prof : NaN,
+      zt: pr ? pr.zt : NaN, mld: pr ? pr.mld : NaN, t50: pr ? pr.t50 : NaN, zCard, dispersion,
+      conv: -div * 1e6, esfuerzo: pres ? pres.E : NaN, histv: isNum(hv) ? Math.round(hv * 100) : NaN, dsst: isNum(s) && isNum(s3) && di3 !== di ? s - s3 : NaN
+    };
+  }).filter(Boolean);
+  return { fecha, celdas, viento: vd, lo, hi };
+}
+function operable(ola) {
+  if (!isNum(ola)) return { t: "s/d", k: "w" };
+  if (ola >= 4) return { t: "No operable", k: "b" };
+  if (ola >= 3) return { t: "Difícil", k: "w" };
+  return { t: "Operable", k: "g" };
+}
+// ================================================================== zona de búsqueda
+const ZONA_KEY = "radarJurel.v2.zona";
+const PRESETS = [
+  { id: "todo", n: "Toda la zona", N: 33, S: 41 },
+  { id: "norte", n: "Norte", N: 33, S: 35.5 },
+  { id: "centro", n: "Centro", N: 35.5, S: 38.5 },
+  { id: "sur", n: "Sur", N: 38.5, S: 41 }
+];
+const ZONAS_COMPARA = PRESETS.slice(1);
+function zona() {
+  const g = id => parseFloat(document.getElementById(id).value);
+  let N = isNum(g("zN")) ? g("zN") : 33, S = isNum(g("zS")) ? g("zS") : 41;
+  if (N > S) [N, S] = [S, N];
+  const dMin = isNum(g("zDmin")) ? Math.max(0, g("zDmin")) : 0;
+  const dMax = isNum(g("zDmax")) && g("zDmax") > 0 ? g("zDmax") : 9999;
+  const port = isNum(g("zPort")) && g("zPort") > 0 ? g("zPort") : 0;
+  return { N, S, dMin, dMax, port };
+}
+function enZona(c, z, latN, latS) {
+  const N = latN ?? z.N, S = latS ?? z.S;
+  if (c.lat > -N + 1e-6 || c.lat < -S - 1e-6) return false;
+  const dmn = c.distKm / 1.852;
+  if (dmn < z.dMin || dmn > z.dMax) return false;
+  if (z.port) { const [pl, po] = PUERTOS[prefs().port]; if (distMn(pl, po, c.lat, c.lon) > z.port) return false; }
+  return true;
+}
+function presetActivo(z) {
+  const p = PRESETS.find(x => x.N === z.N && x.S === z.S);
+  return p ? p.id : null;
+}
+function etiquetaZona(z) {
+  const p = PRESETS.find(x => x.N === z.N && x.S === z.S);
+  const lat = `${String(z.N).replace(".", ",")}°–${String(z.S).replace(".", ",")}°S`;
+  const extra = [];
+  if (z.dMin > 0 || z.dMax < 400) extra.push(`${z.dMin}–${z.dMax < 9999 ? z.dMax : "∞"} mn de costa`);
+  if (z.port) extra.push(`hasta ${z.port} mn de ${prefs().port}`);
+  return (p && p.id !== "todo" ? `${p.n} (${lat})` : p ? `Toda la zona (${lat})` : lat) + (extra.length ? ", " + extra.join(", ") : "");
+}
+function guardarZona() { store.set(ZONA_KEY, zona()); }
+function aplicarZona(N, S) {
+  document.getElementById("zN").value = N; document.getElementById("zS").value = S;
+  guardarZona(); SEL = null; actualizarVista();
+}
+function renderPresets() {
+  const el = document.getElementById("presets"), act = presetActivo(zona());
+  el.innerHTML = "";
+  for (const p of PRESETS) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "layer"; b.textContent = p.n; b.setAttribute("aria-pressed", String(act === p.id));
+    b.addEventListener("click", () => aplicarZona(p.N, p.S));
+    el.appendChild(b);
+  }
+}
+function renderZonas() {
+  const tb = document.getElementById("zonasBody"), z = zona(), p = prefs(), [pl, po] = PUERTOS[p.port];
+  document.getElementById("thZDist").textContent = `mn de ${p.port}`;
+  document.getElementById("zonaActual").innerHTML = `Buscando en: <b>${etiquetaZona(z)}</b>`;
+  tb.innerHTML = "";
+  if (!CALC) return;
+  const act = presetActivo(z);
+  for (const zc of ZONAS_COMPARA) {
+    const cel = CALC.celdas.filter(c => enZona(c, z, zc.N, zc.S) && isNum(c.sst));
+    const top = topCuadrantes(cel, 3), t1 = top[0];
+    const tr = document.createElement("tr");
+    tr.className = "pick" + (act === zc.id ? " activa" : ""); tr.tabIndex = 0;
+    if (!t1) tr.innerHTML = `<td>${zc.n}</td><td colspan="5" class="note">Sin celdas con estos límites</td>`;
+    else {
+      const op = operable(t1.ola);
+      tr.innerHTML = `<td>${zc.n} <span class="note">${String(zc.N).replace(".", ",")}°–${String(zc.S).replace(".", ",")}°S</span></td>
+        <td><span class="scorebar"><i style="width:${t1.score}%"></i></span><b class="mono">${t1.score}</b></td>
+        <td class="mono">${fmtPos(t1.lat, t1.lon)}</td><td class="mono">${f1(t1.sst)}</td>
+        <td><span class="mono">${f1(t1.ola)}</span> <span class="chip ${op.k}">${op.t}</span></td>
+        <td class="mono">${Math.round(distMn(pl, po, t1.lat, t1.lon))}</td>`;
+    }
+    const go = () => aplicarZona(zc.N, zc.S);
+    tr.addEventListener("click", go); tr.addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+    tb.appendChild(tr);
+  }
+}
+
+function topCuadrantes(celdas, n = 8) {
+  const orden = celdas.filter(c => isNum(c.sst)).sort((a, b) => b.score - a.score);
+  const el = [];
+  for (const c of orden) {
+    if (el.every(e => Math.abs(e.lat - c.lat) > 0.75 || Math.abs(e.lon - c.lon) > 0.75)) el.push(c);
+    if (el.length >= n) break;
+  }
+  return el;
+}
+
+// ================================================================== estado y capas
+let DATA = null, DIA = 0, CAPA = "score", SEL = null, CALC = null, TOP = [], CUI_LAT = -37, LANCES = store.get(LANCES_KEY) || [];
+const CAPAS = [
+  { id: "score", n: "Índice jurel", u: "", lo: 0, hi: 100, ramp: "idx" },
+  { id: "sst", n: "TSM", u: "°C", ramp: "sst" },
+  { id: "t50", n: "T 50 m", u: "°C", ramp: "sst", need: "rtofs" },
+  { id: "zt", n: "Termoclina", u: "m", lo: 0, hi: 150, ramp: "prof", need: "rtofs", f: v => Math.round(v) },
+  { id: "zCard", n: "Prof. cardumen", u: "m", lo: 0, hi: 160, ramp: "prof", need: "rtofs", f: v => Math.round(v) },
+  { id: "chl", n: "Clorofila", u: "mg/m³ log", ramp: "chl", need: "chl", log: true },
+  { id: "grad", n: "Frente térmico", u: "°C/km", lo: 0, hi: 0.03, ramp: "idx", f: v => v.toFixed(3) },
+  { id: "conv", n: "Convergencia", u: "×10⁻⁶ s⁻¹", lo: -6, hi: 6, ramp: "div2" },
+  { id: "dispersion", n: "Dispersión", u: "0–1", lo: 0, hi: 1, ramp: "ola", f: v => v.toFixed(2) },
+  { id: "esfuerzo", n: "Presión de pesca", u: "lances pond.", lo: 0, hi: 4, ramp: "ola", need: "lances", f: v => v.toFixed(1) },
+  { id: "prof", n: "Fondo", u: "m", lo: 0, hi: 5000, ramp: "prof", need: "bati", f: v => Math.round(v) },
+  { id: "pml", n: "Modelo ML", u: "% de lances con jurel", lo: 0, hi: 100, ramp: "idx", need: "ml", f: v => Math.round(v) },
+  { id: "histv", n: "Historial flota", u: "0–100", lo: 0, hi: 100, ramp: "idx", f: v => Math.round(v) },
+  { id: "ola", n: "Olas máx", u: "m", lo: 0, hi: 6, ramp: "ola" }
+];
+const RAMPS = {
+  idx: ["#203a63", "#2a6f8f", "#3aa39b", "#9ccf6c", "#f0d34a", "#ee7b2c", "#c8382a"],
+  sst: ["#2b2c7a", "#2f6db5", "#3eb0c9", "#9ad7a0", "#f2d05a", "#ef8a3a", "#c63b2b"],
+  div2: ["#c63b2b", "#f2a77a", "#eeeeee", "#8fbfe0", "#2f6db5"],
+  ola: ["#e8f1f5", "#a9cde0", "#5d9cc4", "#3d5fa8", "#5b2d8c"],
+  prof: ["#d7eef3", "#86c3d6", "#3f8fb5", "#285d93", "#1c2f63"],
+  chl: ["#2b2c7a", "#2e6aa8", "#2fa18c", "#8cc63f", "#d9e021"]
+};
+function hex2rgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function colorRamp(ramp, t) {
+  const st = RAMPS[ramp].map(hex2rgb); t = clamp(t, 0, 1) * (st.length - 1);
+  const i = Math.min(Math.floor(t), st.length - 2), f = t - i, a = st[i], b = st[i + 1];
+  return `rgb(${Math.round(a[0] + (b[0] - a[0]) * f)},${Math.round(a[1] + (b[1] - a[1]) * f)},${Math.round(a[2] + (b[2] - a[2]) * f)})`;
+}
+function valorCapa(capa, c) { const v = c[capa.id]; return capa.log && isNum(v) ? Math.log10(Math.max(v, 0.01)) : v; }
+function rangoCapa(capa, celdas) {
+  if (capa.lo !== undefined) return [capa.lo, capa.hi];
+  const v = celdas.map(c => valorCapa(capa, c)).filter(isNum).sort((a, b) => a - b);
+  if (!v.length) return [0, 1];
+  return [Math.floor(v[Math.floor(v.length * 0.02)] * 2) / 2, Math.ceil(v[Math.floor(v.length * 0.98)] * 2) / 2];
+}
+function capaDisponible(capa) {
+  if (!capa.need) return true;
+  if (capa.need === "lances") return LANCES.length > 0;
+  return !!(DATA && DATA[capa.need]);
+}
+
+// ================================================================== mapa
+const cv = document.getElementById("map"), ctx = cv.getContext("2d");
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let MAPW = 0, MAPH = 0;
+function proj(lat, lon) { return [(lon - VIEW.lonMin) / (VIEW.lonMax - VIEW.lonMin) * MAPW, (VIEW.latMax - lat) / (VIEW.latMax - VIEW.latMin) * MAPH]; }
+function unproj(x, y) { return [VIEW.latMax - y / MAPH * (VIEW.latMax - VIEW.latMin), VIEW.lonMin + x / MAPW * (VIEW.lonMax - VIEW.lonMin)]; }
+function tamMapa() {
+  const w = cv.parentElement.clientWidth;
+  const ratio = ((VIEW.lonMax - VIEW.lonMin) * Math.cos(37 * D2R)) / (VIEW.latMax - VIEW.latMin);
+  const h = Math.min(w / ratio, Math.max(420, window.innerHeight * 0.82));
+  const wAdj = Math.min(w, h * ratio), dpr = window.devicePixelRatio || 1;
+  cv.style.width = wAdj + "px"; cv.style.height = h + "px";
+  cv.width = Math.round(wAdj * dpr); cv.height = Math.round(h * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  MAPW = wAdj; MAPH = h;
+}
+function dibujar() {
+  { const b = document.getElementById("btnFichaSel"); if (b) b.disabled = !SEL; }
+  if (!MAPW) tamMapa();
+  ctx.clearRect(0, 0, MAPW, MAPH);
+  ctx.fillStyle = css("--sea"); ctx.fillRect(0, 0, MAPW, MAPH);
+  const capa = CAPAS.find(c => c.id === CAPA);
+  if (CALC) {
+    const [lo, hi] = rangoCapa(capa, CALC.celdas), h = GRID.step / 2, z = zona();
+    for (const c of CALC.celdas) {
+      const v = valorCapa(capa, c); if (!isNum(v)) continue;
+      const [x1, y1] = proj(c.lat + h, c.lon - h), [x2, y2] = proj(c.lat - h, c.lon + h);
+      ctx.fillStyle = colorRamp(capa.ramp, (v - lo) / (hi - lo));
+      ctx.globalAlpha = enZona(c, z) ? 0.88 : 0.2; ctx.fillRect(x1, y1, x2 - x1 + 0.6, y2 - y1 + 0.6); ctx.globalAlpha = 1;
+    }
+    leyenda(capa, lo, hi);
+    if (z.N > 33 || z.S < 41) {        // líneas de la franja de latitud elegida
+      ctx.strokeStyle = css("--accent"); ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
+      for (const la of [-z.N, -z.S]) { if (la >= -33 || la <= -41) continue; const [, y] = proj(la, 0); ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(MAPW, y); ctx.stroke(); }
+      ctx.setLineDash([]);
+    }
+  }
+  ctx.beginPath();
+  COSTA.forEach(([la, lo], i) => { const [x, y] = proj(la, lo); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+  const [xe] = proj(0, VIEW.lonMax + 1);
+  ctx.lineTo(xe, proj(COSTA[COSTA.length - 1][0], 0)[1]); ctx.lineTo(xe, proj(COSTA[0][0], 0)[1]); ctx.closePath();
+  ctx.fillStyle = css("--land"); ctx.fill(); ctx.strokeStyle = css("--coast"); ctx.lineWidth = 1.3; ctx.stroke();
+  for (const is of ISLAS) {
+    const [x, y] = proj(is.lat, is.lon);
+    ctx.beginPath(); ctx.arc(x, y, Math.max(2.5, is.r / (VIEW.lonMax - VIEW.lonMin) * MAPW), 0, 2 * Math.PI); ctx.fillStyle = css("--land"); ctx.fill(); ctx.stroke();
+  }
+  ctx.font = `11px ${css("--f-mono")}`; ctx.fillStyle = css("--muted"); ctx.strokeStyle = css("--line"); ctx.lineWidth = 0.6;
+  ctx.setLineDash([3, 4]);
+  for (let la = -41; la <= -33; la++) { const [, y] = proj(la, 0); ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(MAPW, y); ctx.stroke(); ctx.fillText(`${-la}°S`, 4, y - 3); }
+  for (let lo = -80; lo <= -72; lo += 2) { const [x] = proj(0, lo); ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, MAPH); ctx.stroke(); ctx.fillText(`${-lo}°W`, x + 3, MAPH - 5); }
+  ctx.setLineDash([]);
+  // lances recientes
+  if (CAPA === "esfuerzo" && LANCES.length && CALC) {
+    const ref = CALC.fecha > hoyLocal() ? hoyLocal() : CALC.fecha;
+    for (const x of LANCES) {
+      const e = diasEntre(x.f, ref); if (e < 1 || e > 10) continue;
+      const [px, py] = proj(x.la, x.lo);
+      ctx.beginPath(); ctx.arc(px, py, x.c > 0 ? 4 : 3, 0, 2 * Math.PI);
+      ctx.fillStyle = x.c > 0 ? css("--good") : css("--bad"); ctx.globalAlpha = 0.85; ctx.fill(); ctx.globalAlpha = 1;
+    }
+  }
+  ctx.font = `600 12px ${css("--f-body")}`;
+  for (const [n, [la, lo]] of Object.entries(PUERTOS)) {
+    const [x, y] = proj(la, lo);
+    ctx.fillStyle = css("--ink"); ctx.beginPath(); ctx.arc(x, y, 3.5, 0, 2 * Math.PI); ctx.fill();
+    const tw = ctx.measureText(n).width, dy = n === "Talcahuano" ? -4 : n === "Coronel" ? 10 : 4;
+    ctx.fillText(n, x + 6 + tw > MAPW - 2 ? x - 6 - tw : x + 6, y + dy);
+  }
+  TOP.forEach((c, i) => {
+    const [x, y] = proj(c.lat, c.lon), sel = SEL && SEL.lat === c.lat && SEL.lon === c.lon;
+    ctx.beginPath(); ctx.arc(x, y, sel ? 12 : 9, 0, 2 * Math.PI);
+    ctx.fillStyle = css("--panel"); ctx.fill(); ctx.lineWidth = sel ? 3 : 2; ctx.strokeStyle = css("--accent"); ctx.stroke();
+    ctx.fillStyle = css("--accent"); ctx.font = `700 12px ${css("--f-mono")}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(String(i + 1), x, y + 0.5); ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+  });
+  if (SEL && !TOP.some(c => c.lat === SEL.lat && c.lon === SEL.lon)) {
+    const h = GRID.step / 2, [x1, y1] = proj(SEL.lat + h, SEL.lon - h), [x2, y2] = proj(SEL.lat - h, SEL.lon + h);
+    ctx.lineWidth = 2; ctx.strokeStyle = css("--ink"); ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+  }
+}
+function leyenda(capa, lo, hi) {
+  const lc = document.getElementById("leg"), lx = lc.getContext("2d");
+  for (let i = 0; i < lc.width; i++) { lx.fillStyle = colorRamp(capa.ramp, i / (lc.width - 1)); lx.fillRect(i, 0, 1, lc.height); }
+  const f = capa.log ? (v => (10 ** v).toFixed(v < 0 ? 2 : 1)) : (capa.f || (v => (Math.round(v * 10) / 10).toString()));
+  document.getElementById("legLo").textContent = f(lo);
+  document.getElementById("legHi").textContent = f(hi);
+  document.getElementById("legName").textContent = capa.n + (capa.u ? ` (${capa.u.replace(" log", "")})` : "") + (capa.id === "esfuerzo" ? " · verde = lance con captura, rojo = sin captura" : "");
+}
+function celdaEn(ev) {
+  if (!CALC) return null;
+  const r = cv.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top, [lat, lon] = unproj(x, y);
+  let best = null, bd = 1e9;
+  for (const c of CALC.celdas) { const d = Math.abs(c.lat - lat) + Math.abs(c.lon - lon); if (d < bd) { bd = d; best = c; } }
+  return bd <= GRID.step ? { c: best, x, y } : null;
+}
+function tooltip(hit) {
+  const tip = document.getElementById("tip");
+  if (!hit) { tip.hidden = true; return; }
+  const c = hit.c, p = prefs(), [pl, po] = PUERTOS[p.port], op = operable(c.ola);
+  const filas = FACTORES.map(f => `<span>${f.n}</span><i style="width:${Math.round(c.comp[f.id] * 100)}%"></i><b>${Math.round(c.comp[f.id] * 100)}</b>`).join("");
+  tip.innerHTML = `<div class="mono" style="font-weight:600">${fmtPos(c.lat, c.lon)} · índice ${c.score}</div>
+    <div>TSM <b>${f1(c.sst)}</b> °C · T50 <b>${f1(c.t50)}</b> · Chl <b>${isNum(c.chl) ? c.chl.toFixed(2) : "–"}</b></div>
+    <div>Termoclina <b>${f0(c.zt)}</b> m · mezcla <b>${f0(c.mld)}</b> m · cardumen ≈ <b>${f0(c.zCard)}</b> m</div>
+    ${isNum(c.pml) ? `<div>Modelo ML <b>${c.pml}%</b> de lances con jurel · índice de factores <b>${c.indiceExp}</b></div>` : ""}
+    <div>Fondo <b>${f0(c.prof)}</b> m · olas <b>${f1(c.ola)}</b> m <span class="chip ${op.k}">${op.t}</span></div>
+    <div>${Math.round(distMn(pl, po, c.lat, c.lon))} mn, rumbo ${Math.round(rumbo(pl, po, c.lat, c.lon))}° desde ${p.port}</div>
+    <div class="comps">${filas}</div>`;
+  tip.hidden = false;
+  const box = document.getElementById("mapbox").getBoundingClientRect();
+  let left = hit.x + 14, top = hit.y + 14;
+  if (left + 280 > box.width) left = Math.max(0, hit.x - 290);
+  if (top + 300 > box.height) top = Math.max(0, hit.y - 310);
+  tip.style.left = left + "px"; tip.style.top = top + "px";
+}
+cv.addEventListener("mousemove", ev => tooltip(celdaEn(ev)));
+cv.addEventListener("mouseleave", () => tooltip(null));
+cv.addEventListener("click", ev => { const h = celdaEn(ev); if (h) { SEL = h.c; dibujar(); tooltip(h); } });
+
+// ================================================================== paneles
+function renderDias() {
+  const cont = document.getElementById("days"); cont.innerHTML = "";
+  if (!DATA) return null;
+  const F = DATA.marino.fechas, hoy = hoyLocal(), ini = Math.max(0, F.indexOf(hoy)), res = [];
+  for (let k = 0; k < 8 && ini + k < F.length; k++) {
+    const z = zona();
+    const di = ini + k, calc = di === DIA ? CALC : calcularDia(DATA, di, LANCES), top = topCuadrantes(calc.celdas.filter(c => enZona(c, z)), 5);
+    const olas = mean(top.map(c => c.ola));
+    res.push({ di, sc: Math.round(mean(top.map(c => c.score))), olas, op: operable(olas) });
+  }
+  const efectivo = r => (isNum(r.sc) ? r.sc : 0) * ({ g: 1, w: 0.8, b: 0.4 }[r.op.k] || 0.8);
+  const mejor = res.reduce((a, b) => (efectivo(b) > efectivo(a) ? b : a), res[0]);
+  for (const r of res) {
+    const b = document.createElement("button"), f = F[r.di];
+    b.type = "button"; b.className = "day"; b.setAttribute("aria-pressed", String(r.di === DIA));
+    b.innerHTML = `<span class="dn">${f === hoy ? "Hoy" : etiquetaDia(f)}</span>
+      <span class="bar"><i style="width:${isNum(r.sc) ? r.sc : 0}%"></i></span>
+      <span class="sc">${isNum(r.sc) ? r.sc : "–"} <span class="chip ${r.op.k}">${isNum(r.olas) ? r.olas.toFixed(1) + " m" : "s/d"}</span></span>
+      <span class="best">${r === mejor ? "Mejor ventana" : ""}</span>`;
+    b.addEventListener("click", () => { DIA = r.di; SEL = null; actualizarVista(); });
+    cont.appendChild(b);
+  }
+  return { mejor };
+}
+function renderTabla() {
+  const tb = document.getElementById("tbody"), p = prefs(), [pl, po] = PUERTOS[p.port];
+  document.getElementById("thDist").textContent = `mn · rumbo (${p.port})`;
+  tb.innerHTML = "";
+  TOP.forEach((c, i) => {
+    const op = operable(c.ola), tr = document.createElement("tr");
+    tr.className = "pick"; tr.tabIndex = 0;
+    tr.innerHTML = `<td class="rank">${i + 1}</td><td class="mono">${fmtPos(c.lat, c.lon)}</td>
+      <td><span class="scorebar"><i style="width:${c.score}%"></i></span><b class="mono">${c.score}</b></td>
+      <td class="mono">${f1(c.sst)}</td><td class="mono">${f0(c.zt)}</td><td class="mono">${f0(c.zCard)}</td>
+      <td class="mono">${isNum(c.chl) ? c.chl.toFixed(2) : "–"}</td><td class="mono">${isNum(c.dispersion) ? c.dispersion.toFixed(2) : "–"}</td>
+      <td><span class="mono">${f1(c.ola)}</span> <span class="chip ${op.k}">${op.t}</span></td>
+      <td class="mono">${Math.round(distMn(pl, po, c.lat, c.lon))} · ${String(Math.round(rumbo(pl, po, c.lat, c.lon))).padStart(3, "0")}°</td>`;
+    const go = () => { SEL = c; dibujar(); };
+    tr.addEventListener("click", go); tr.addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+    tb.appendChild(tr);
+  });
+}
+function zonaNombre(lat) {
+  if (lat > -35.5) return "la VI–VII Región";
+  if (lat > -36.5) return "Cobquecura–Tomé";
+  if (lat > -37.3) return "Talcahuano–Golfo de Arauco";
+  if (lat > -38.2) return "Lebu–Isla Mocha";
+  if (lat > -39.3) return "la Araucanía";
+  return "Valdivia–Corral";
+}
+function unirY(a) { return a.length < 2 ? a.join("") : a.slice(0, -1).join(", ") + " y " + a[a.length - 1]; }
+function renderVeredicto(info) {
+  const el = document.getElementById("verdict");
+  if (!CALC) { el.textContent = "Sin datos suficientes para este día."; return; }
+  if (!TOP.length) { el.textContent = "No hay celdas con datos dentro de la zona de búsqueda. Amplía los límites o elige «Toda la zona»."; return; }
+  const f = CALC.fecha, t1 = TOP[0], p = prefs(), [pl, po] = PUERTOS[p.port];
+  const v37 = CALC.viento.find(v => v.lat === -37) || {};
+  let viento = "sin datos de viento";
+  if (isNum(v37.cui3)) {
+    if (v37.norte72 >= 24) viento = "viento norte persistente: la surgencia está cortada y el recurso tiende a dispersarse";
+    else if (isNum(v37.relax) && v37.relax > 60) viento = "la surgencia viene aflojando tras un pulso de viento sur: condiciones de agregación en los bordes fríos";
+    else if (v37.cui3 > 80) viento = "surgencia activa con viento sur: los frentes se están formando, conviene esperar que afloje";
+    else viento = "viento débil o variable";
+  }
+  // factor más débil y más fuerte del mejor cuadrante
+  const orden = FACTORES.filter(x => p.pesos[x.id] > 0).map(x => [x.n, t1.comp[x.id]]).sort((a, b) => a[1] - b[1]);
+  const debil = orden[0], fuerte = orden[orden.length - 1];
+  const op = operable(t1.ola), zonas = [...new Set(TOP.slice(0, 3).map(c => zonaNombre(c.lat)))];
+  document.getElementById("vTitle").textContent = `Lectura ${f === hoyLocal() ? "de hoy" : "del " + etiquetaDia(f)}`;
+  const prof = isNum(t1.zCard) ? ` El cardumen estaría cerca de <b>${Math.round(t1.zCard)} m</b> (termoclina a ${f0(t1.zt)} m)${t1.zCard > p.red ? ", más hondo que el alcance de la red" : ""}.` : "";
+  el.innerHTML = `<span class="note">Zona: ${etiquetaZona(zona())}</span><br>Mayor índice frente a <strong>${unirY(zonas)}</strong>. El mejor cuadrante es <span class="mono">${fmtPos(t1.lat, t1.lon)}</span>,
+    a ${Math.round(distMn(pl, po, t1.lat, t1.lon))} mn de ${p.port}, con índice ${t1.score} y TSM ${f1(t1.sst)} °C.${isNum(t1.pml) ? ` El modelo entrenado con los lances de la flota da <b>${t1.pml}%</b> de probabilidad de lance con jurel ahí.` : ""}${prof}
+    Su punto fuerte es <b>${fuerte[0].toLowerCase()}</b> (${Math.round(fuerte[1] * 100)}) y el débil, <b>${debil[0].toLowerCase()}</b> (${Math.round(debil[1] * 100)}).
+    En la costa del Biobío hay ${viento}. Mar: <span class="chip ${op.k}">${op.t}</span>
+    ${info && info.mejor ? `<br>Mejor día de la semana para zarpar: <strong>${DATA.marino.fechas[info.mejor.di] === hoyLocal() ? "hoy" : etiquetaDia(DATA.marino.fechas[info.mejor.di])}</strong>.` : ""}
+    <br><span class="note">Ventana térmica: ${CALC.lo.toFixed(1)}–${CALC.hi.toFixed(1)} °C en superficie.</span>`;
+}
+function renderCui() {
+  const cont = document.getElementById("cuiChart"), txt = document.getElementById("cuiTxt");
+  const w = DATA && DATA.viento;
+  if (!w) { cont.innerHTML = ""; txt.textContent = "Sin datos de viento."; return; }
+  const i = w.lats.indexOf(CUI_LAT); if (i < 0) return;
+  const s = w.cui[i], f = w.fechas, n = f.length;
+  const W = 560, H = 210, L = 40, R = 8, T = 12, B = 34;
+  const ymax = Math.ceil(Math.max(100, ...s.filter(isNum).map(Math.abs)) / 100) * 100;
+  const y = v => T + (H - T - B) * (ymax - v) / (2 * ymax), bw = (W - L - R) / n;
+  const hoy = hoyLocal(), selF = DATA.marino.fechas[DIA];
+  let g = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Índice de surgencia diario">`;
+  for (const v of [-ymax, -ymax / 2, 0, ymax / 2, ymax]) {
+    g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="${v === 0 ? 1.2 : 0.6}" ${v === 0 ? "" : 'stroke-dasharray="3 4"'}/>`;
+    g += `<text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`;
+  }
+  f.forEach((d, k) => {
+    const v = s[k], x = L + k * bw;
+    if (d === selF) g += `<rect x="${x}" y="${T}" width="${bw}" height="${H - T - B}" fill="var(--sea)"/>`;
+    if (isNum(v)) { const y0 = y(0), y1 = y(v); g += `<rect x="${x + bw * 0.18}" y="${Math.min(y0, y1)}" width="${bw * 0.64}" height="${Math.max(1, Math.abs(y1 - y0))}" fill="${v >= 0 ? "var(--good)" : "var(--accent)"}" opacity="${d < hoy ? 0.55 : 1}"/>`; }
+    if (k % 2 === 0 || n <= 10) g += `<text x="${x + bw / 2}" y="${H - B + 14}" text-anchor="middle">${new Date(d + "T12:00:00").getDate()}</text>`;
+    if (d === hoy) g += `<line x1="${x}" x2="${x}" y1="${T}" y2="${H - B + 2}" stroke="var(--ink)" stroke-dasharray="2 3"/><text x="${x + 3}" y="${T + 10}" text-anchor="start" style="fill:var(--ink)">hoy</text>`;
+  });
+  g += `<text x="${L}" y="${H - 4}" text-anchor="start">día del mes · claras = observado, oscuras = pronóstico</text></svg>`;
+  cont.innerHTML = g;
+  const vd = CALC ? CALC.viento.find(v => v.lat === CUI_LAT) : null;
+  let estado = "";
+  if (vd && isNum(vd.cui3)) estado = vd.norte72 >= 24 ? "Viento norte persistente: la surgencia está cortada." : (isNum(vd.relax) && vd.relax > 60) ? "Relajación tras un pulso de surgencia: ventana de agregación." : vd.cui3 > 80 ? "Surgencia activa: los frentes se están formando." : "Viento débil o variable.";
+  txt.innerHTML = `Verde: viento sur, la surgencia aflora agua fría. Naranja: viento norte, la surgencia se corta. Después de 3–5 días verdes, cuando las barras bajan (relajación), el recurso suele juntarse en el borde del agua fría.${estado ? ` <b>${etiquetaDia(selF)} a ${-CUI_LAT}°S:</b> ${estado}` : ""}`;
+}
+function renderFuentes() {
+  const el = document.getElementById("fuentes");
+  const lista = DATA ? Object.values(DATA.fuentes) : [];
+  const lan = LANCES.length ? { nombre: "Presión de pesca · lances cargados", ok: true, fecha: LANCES.reduce((m, x) => x.f > m ? x.f : m, ""), det: `${LANCES.length} registros` }
+    : { nombre: "Presión de pesca · lances cargados", ok: null, fecha: "", det: "sin datos: el factor queda neutro" };
+  el.innerHTML = [...lista, lan].map(s => `<div><span class="dot ${s.ok === true ? "ok" : s.ok === false ? (s.fecha ? "old" : "err") : ""}"></span><span>${s.nombre}</span><span class="dt">${s.fecha || ""}</span>${s.det ? `<small>${s.det}</small>` : ""}</div>`).join("")
+    || `<div><span class="dot"></span><span>Sin descargas aún</span><span></span></div>`;
+}
+function renderCapas() {
+  const cont = document.getElementById("layers"); cont.innerHTML = "";
+  for (const c of CAPAS) {
+    const b = document.createElement("button"), ok = capaDisponible(c);
+    b.type = "button"; b.className = "layer"; b.textContent = c.n; b.disabled = !ok;
+    b.setAttribute("aria-pressed", String(c.id === CAPA)); if (!ok) b.title = "Sin datos para esta capa";
+    b.addEventListener("click", () => { CAPA = c.id; renderCapas(); dibujar(); });
+    cont.appendChild(b);
+  }
+}
+function renderPesos() {
+  const el = document.getElementById("pesos"), pr = store.get(PREF_KEY) || {}, pw = pr.pesos || {};
+  el.innerHTML = FACTORES.map(f => `<label for="w_${f.id}">${f.n}<input type="number" id="w_${f.id}" min="0" max="50" step="1" value="${isNum(pw[f.id]) ? pw[f.id] : f.w}"></label>`).join("");
+  document.getElementById("compList").innerHTML = FACTORES.map(f => `<li><b>${f.n}.</b> ${f.d}</li>`).join("");
+  for (const f of FACTORES) document.getElementById("w_" + f.id).addEventListener("change", guardarYRecalcular);
+}
+function renderLancesInfo() {
+  const el = document.getElementById("lancesInfo");
+  if (!LANCES.length) { el.textContent = "Sin lances cargados. El factor de presión queda neutro."; return; }
+  const fs = LANCES.map(x => x.f).sort(), pos = LANCES.filter(x => x.c > 0).length;
+  const rec = LANCES.filter(x => { const e = diasEntre(x.f, hoyLocal()); return e >= 1 && e <= 10; }).length;
+  el.textContent = `${LANCES.length} lances (${pos} con captura) del ${fs[0]} al ${fs[fs.length - 1]}. En los últimos 10 días: ${rec}.`;
+}
+function actualizarVista() {
+  renderFuentes(); renderLancesInfo();
+  if (!DATA) { renderCapas(); dibujar(); return; }
+  CALC = calcularDia(DATA, DIA, LANCES);
+  const z = zona();
+  TOP = topCuadrantes(CALC.celdas.filter(c => enZona(c, z)), 8);
+  renderPresets(); renderZonas();
+  const capa = CAPAS.find(c => c.id === CAPA); if (!capaDisponible(capa)) CAPA = "score";
+  renderCapas();
+  const info = renderDias();
+  renderTabla(); renderVeredicto(info); renderCui(); renderSugerenciaML(); dibujar();
+}
+function guardarYRecalcular() { store.set(PREF_KEY, prefs()); actualizarVista(); }
+
+// ================================================================== carga
+function setStatus(estado, txt) { document.getElementById("dot").className = "dot " + estado; document.getElementById("statusTxt").textContent = txt; }
+function mostrarError(msg) { const b = document.getElementById("errBox"); b.hidden = !msg; b.textContent = msg || ""; }
+function elegirDiaInicial() {
+  const F = DATA.marino.fechas, k = F.indexOf(hoyLocal());
+  if (DIA < 0 || DIA >= F.length || F[DIA] < hoyLocal()) DIA = k >= 0 ? k : 0;
+}
+function resumenFuentes(d) {
+  const v = Object.values(d.fuentes), ok = v.filter(s => s.ok).length;
+  return `Datos del ${fechaHora(d.fetched)} · ${ok} de ${v.length} fuentes al día`;
+}
+let cargando = false;
+async function cargar(forzar) {
+  if (cargando) return;
+  const cache = store.get(CACHE_KEY);
+  const valido = cache && cache.n === G.cells.length && cache.marino;
+  const fresco = valido && (Date.now() - new Date(cache.fetched).getTime() < REFRESH_MS);
+  if (valido && !DATA) { DATA = cache; DIA = -1; elegirDiaInicial(); actualizarVista(); }
+  if (fresco && !forzar) { setStatus("ok", resumenFuentes(cache)); return; }
+  cargando = true; document.getElementById("btnRefresh").disabled = true; mostrarError(null);
+  try {
+    const d = await descargarTodo(m => setStatus("load", m + "…"));
+    DATA = d; DIA = -1; elegirDiaInicial();
+    if (!store.set(CACHE_KEY, d)) { store.del(CACHE_KEY); }
+    actualizarVista();
+    const fallas = Object.values(d.fuentes).filter(s => s.ok === false && !s.fecha);
+    setStatus(fallas.length ? "old" : "ok", resumenFuentes(d));
+    if (fallas.length) mostrarError(`No se pudo leer: ${fallas.map(s => s.nombre.split(" · ")[0]).join(", ")}. El índice sigue funcionando y esos factores cuentan como neutros. Detalle en "Fuentes de datos".`);
+  } catch (e) {
+    mostrarError(e.message + (DATA ? ` Se muestran los datos del ${fechaHora(DATA.fetched)}.` : ""));
+    setStatus("err", DATA ? `Datos del ${fechaHora(DATA.fetched)} (no se pudo actualizar)` : "Sin datos");
+    if (!DATA) document.getElementById("verdict").textContent = "No se pudieron descargar datos. Revisa la conexión y presiona Actualizar ahora.";
+  } finally { cargando = false; document.getElementById("btnRefresh").disabled = false; }
+}
+
+
+// ================================================================== consulta de zona
+const LUGARES = [
+  ["San Antonio", -33.59, -71.68], ["Pichilemu", -34.39, -72.06], ["Constitución", -35.33, -72.48],
+  ["Cobquecura", -36.13, -72.86], ["Talcahuano / Bahía Concepción", -36.62, -73.12],
+  ["Isla Santa María", -37.03, -73.55], ["Golfo de Arauco", -37.12, -73.36], ["Punta Lavapié", -37.15, -73.62],
+  ["Lebu", -37.61, -73.72], ["Tirúa", -38.34, -73.55], ["Isla Mocha", -38.37, -73.95],
+  ["Puerto Saavedra", -38.78, -73.45], ["Queule", -39.39, -73.25], ["Corral / Valdivia", -39.88, -73.48],
+  ["Bahía Mansa", -40.57, -73.79]
+];
+function parseCoordTexto(s) {
+  s = String(s || "").trim().toUpperCase().replace(/[SWO]/g, "").trim();
+  if (!s) return NaN;
+  let m = s.match(/^-?\s*(\d+(?:[.,]\d+)?)\s*[°º]?\s*(\d+(?:[.,]\d+)?)?\s*['’]?\s*(\d+(?:[.,]\d+)?)?/);
+  if (!m) return NaN;
+  const g = parseFloat(m[1].replace(",", ".")), mi = m[2] ? parseFloat(m[2].replace(",", ".")) : 0, se = m[3] ? parseFloat(m[3].replace(",", ".")) : 0;
+  if (!m[2] && /[.,]/.test(m[1])) return -Math.abs(g);
+  return -(Math.abs(g) + mi / 60 + se / 3600);
+}
+function horaLocalISO() {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(new Date()).map(x => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:00`;
+}
+const RUMBOS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+const rosa = d => isNum(d) ? RUMBOS[Math.round(((d % 360) + 360) % 360 / 22.5) % 16] : "–";
+function etiquetaHora(iso) { const d = new Date(iso + ":00"); return `${DIAS[d.getDay()]} ${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:00`; }
+
+async function consultarPunto(lat, lon) {
+  const h = hosts(), keyQ = h.key ? `&apikey=${encodeURIComponent(h.key)}` : "";
+  const base = `latitude=${lat.toFixed(3)}&longitude=${lon.toFixed(3)}&past_days=1&forecast_days=4&timezone=${encodeURIComponent(TZ)}${keyQ}`;
+  const [mar, met] = await Promise.all([
+    getJSON(`${h.marine}/v1/marine?${base}&cell_selection=sea&hourly=sea_surface_temperature,wave_height,wind_wave_height,swell_wave_height,swell_wave_period,ocean_current_velocity,ocean_current_direction`),
+    getJSON(`${h.api}/v1/forecast?${base}&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl&wind_speed_unit=kn`)
+  ]);
+  const M = mar[0].hourly || {}, W = met[0].hourly || {};
+  const uCur = ((mar[0].hourly_units || {}).ocean_current_velocity) || "km/h";
+  const facKn = uCur === "kn" ? 1 : uCur === "m/s" ? 1.9438 : 0.5400;
+  const t = M.time || W.time || [];
+  const idxW = new Map((W.time || []).map((x, i) => [x, i]));
+  const filas = t.map((x, i) => {
+    const j = idxW.get(x);
+    return {
+      t: x, sst: M.sea_surface_temperature?.[i], ola: M.wave_height?.[i], olaV: M.wind_wave_height?.[i],
+      swell: M.swell_wave_height?.[i], perS: M.swell_wave_period?.[i],
+      cur: isNum(M.ocean_current_velocity?.[i]) ? M.ocean_current_velocity[i] * facKn : NaN, curDir: M.ocean_current_direction?.[i],
+      vto: j !== undefined ? W.wind_speed_10m?.[j] : NaN, vDir: j !== undefined ? W.wind_direction_10m?.[j] : NaN,
+      racha: j !== undefined ? W.wind_gusts_10m?.[j] : NaN, pres: j !== undefined ? W.pressure_msl?.[j] : NaN
+    };
+  });
+  // la TSM viene cada 6 h: se arrastra el último valor
+  let ult = NaN; for (const f of filas) { if (isNum(f.sst)) ult = f.sst; else f.sst = ult; }
+  return filas;
+}
+function ventanasOperables(filas, desde, horas = 72, olaMax = 3, vtoMax = 22) {
+  const fut = filas.filter(f => f.t >= desde).slice(0, horas), out = [];
+  let ini = null, prev = null;
+  for (const f of fut) {
+    const ok = isNum(f.ola) && f.ola < olaMax && (!isNum(f.vto) || f.vto < vtoMax);
+    if (ok && !ini) ini = f.t;
+    if (!ok && ini) { out.push([ini, prev.t]); ini = null; }
+    prev = f;
+  }
+  if (ini && prev) out.push([ini, prev.t]);
+  return out.map(([a, b]) => ({ a, b, h: Math.round((new Date(b + ":00") - new Date(a + ":00")) / 3600000) + 1 })).filter(v => v.h >= 3);
+}
+function grafico72(filas, desde, campos, umbral, unidad, titulo) {
+  const fut = filas.filter(f => f.t >= desde).slice(0, 72);
+  if (!fut.length) return "";
+  const W = 460, H = 190, L = 34, R = 8, T = 30, B = 32;
+  const vals = fut.flatMap(f => campos.map(c => f[c.k])).filter(isNum);
+  const ymax = Math.max(umbral * 1.25, ...vals) * 1.05 || 1;
+  const x = i => L + (W - L - R) * i / Math.max(fut.length - 1, 1), y = v => T + (H - T - B) * (1 - v / ymax);
+  let g = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${titulo}"><text x="${L}" y="14" style="fill:var(--ink);font-weight:600">${titulo}</text>`;
+  for (const v of [0, ymax / 2, ymax]) g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="0.6" stroke-dasharray="3 4"/><text x="${L - 5}" y="${y(v) + 4}" text-anchor="end">${v < 10 ? v.toFixed(1) : Math.round(v)}</text>`;
+  g += `<line x1="${L}" x2="${W - R}" y1="${y(umbral)}" y2="${y(umbral)}" stroke="var(--bad)" stroke-width="1" stroke-dasharray="5 3"/><text x="${W - R}" y="${y(umbral) - 4}" text-anchor="end" style="fill:var(--bad)">límite ${umbral} ${unidad}</text>`;
+  fut.forEach((f, i) => {
+    if (f.t.endsWith("T00:00") || i === 0) {
+      g += `<line x1="${x(i)}" x2="${x(i)}" y1="${T}" y2="${H - B}" stroke="var(--line)" stroke-width="0.6"/>`;
+      g += `<text x="${x(i) + 3}" y="${H - B + 14}">${i === 0 ? "ahora" : etiquetaDia(f.t.slice(0, 10))}</text>`;
+    }
+  });
+  for (const c of campos) {
+    const pts = fut.map((f, i) => isNum(f[c.k]) ? `${x(i).toFixed(1)},${y(f[c.k]).toFixed(1)}` : null).filter(Boolean).join(" ");
+    g += `<polyline points="${pts}" fill="none" stroke="${c.color}" stroke-width="${c.w || 2}" ${c.dash ? `stroke-dasharray="${c.dash}"` : ""}/>`;
+  }
+  let lx = L + 70;
+  for (const c of campos) { g += `<line x1="${lx}" x2="${lx + 18}" y1="10" y2="10" stroke="${c.color}" stroke-width="2" ${c.dash ? `stroke-dasharray="${c.dash}"` : ""}/><text x="${lx + 22}" y="14">${c.n}</text>`; lx += 30 + c.n.length * 6.6; }
+  return g + `<text x="${L}" y="${H - 4}">próximas 72 h · ${unidad}</text></svg>`;
+}
+function fraseFactor(id, c, bueno) {
+  const T = v => isNum(v) ? v.toFixed(1) : "s/d";
+  switch (id) {
+    case "termico": return bueno ? `temperatura dentro de la ventana del jurel (TSM ${T(c.sst)} °C)` : `TSM fuera de la ventana (${T(c.sst)} °C)`;
+    case "termoclina": return !isNum(c.zt) ? "termoclina sin dato" : bueno ? `termoclina somera y marcada a ${Math.round(c.zt)} m (cardumen ≈ ${Math.round(c.zCard)} m)` : `termoclina profunda o difusa (${Math.round(c.zt)} m)`;
+    case "alimento": return !isNum(c.chl) ? "clorofila sin dato" : bueno ? `alimento disponible (clorofila ${c.chl.toFixed(2)} mg/m³)` : `poco alimento o bloom costero (clorofila ${c.chl.toFixed(2)} mg/m³)`;
+    case "frente": return bueno ? "frente térmico marcado en el área" : "sin frente térmico definido";
+    case "cohesion": return bueno ? "condiciones para cardumen compacto" : "condiciones de dispersión del cardumen";
+    case "presion": return !isNum(c.esfuerzo) ? "sin lances recientes cargados" : bueno ? "capturas recientes en la cercanía" : "esfuerzo reciente con poca captura";
+    case "convergencia": return bueno ? "corrientes que convergen y retienen plancton" : "corrientes divergentes";
+    case "surgencia": return bueno ? "relajación después de un pulso de surgencia" : "sin pulso reciente de surgencia";
+    case "fondo": return bueno ? "a la distancia de la costa donde suele pescar la flota" : "lejos de la distancia habitual de pesca de la flota";
+    case "historial": return bueno ? "la flota ha encontrado jurel aquí en este mes en años anteriores" : "poco historial de capturas en este mes";
+  }
+  return "";
+}
+function nivelIndice(s) { return s >= 85 ? "muy favorable" : s >= 70 ? "favorable" : s >= 50 ? "regular" : "poco favorable"; }
+
+let Q_SEQ = 0;
+async function analizarZona(lat, lon, nombre) {
+  const out = document.getElementById("qResultado"), seq = ++Q_SEQ;
+  const R = +document.getElementById("qRadio").value || 20, p = prefs(), [pl, po] = PUERTOS[p.port];
+  out.innerHTML = `<section class="card"><span class="dot load"></span> Consultando condiciones en ${fmtPos(lat, lon)}…</section>`;
+  let filas = null, errVivo = "";
+  try { filas = await consultarPunto(lat, lon); } catch (e) { errVivo = e.message; }
+  if (seq !== Q_SEQ) return;
+  const ahoraISO = horaLocalISO();
+  const ahora = filas ? (filas.find(f => f.t === ahoraISO) || filas.filter(f => f.t <= ahoraISO).pop() || filas[0]) : null;
+  const vent = filas ? ventanasOperables(filas, ahoraISO) : [];
+  // área del radar alrededor del punto
+  let dias = [], celdaHoy = null, areaHoy = [];
+  if (DATA) {
+    const F = DATA.marino.fechas, hoy = hoyLocal(), ini = Math.max(0, F.indexOf(hoy));
+    for (let k = 0; k < 8 && ini + k < F.length; k++) {
+      const di = ini + k, calc = calcularDia(DATA, di, LANCES);
+      const area = calc.celdas.filter(c => distMn(lat, lon, c.lat, c.lon) <= R + 12);
+      const best = area.filter(c => isNum(c.sst)).sort((a, b) => b.score - a.score)[0] || null;
+      dias.push({ f: F[di], best, media: Math.round(mean(area.map(c => c.score))), n: area.length });
+      if (k === 0) { areaHoy = area; celdaHoy = best; }
+    }
+  }
+  const dist = c => distMn(lat, lon, c.lat, c.lon);
+  const cercana = areaHoy.length ? areaHoy.slice().sort((a, b) => dist(a) - dist(b))[0] : null;
+  // lances cercanos
+  const lan = LANCES.filter(x => { const e = diasEntre(x.f, hoyLocal()); return e >= 0 && e <= 10 && distMn(lat, lon, x.la, x.lo) <= R; });
+  const lanPos = lan.filter(x => x.c > 0), lanT = lanPos.reduce((s, x) => s + x.c, 0);
+  // recomendación
+  const op = ahora ? operable(ahora.ola) : { t: "s/d", k: "w" };
+  const sc = celdaHoy ? celdaHoy.score : NaN;
+  const ventPronta = vent.find(v => (new Date(v.a + ":00") - new Date(ahoraISO + ":00")) / 3600000 <= 24);
+  const opF = d => ({ g: 1, w: 0.8, b: 0.4 }[operable(d.best ? d.best.ola : NaN).k] || 0.8);
+  const mejorDia = dias.filter(d => d.best).sort((a, b) => b.best.score * opF(b) - a.best.score * opF(a))[0];
+  let reco = { k: "w", t: "Sin datos suficientes", txt: "Carga el radar (pestaña Radar → Actualizar ahora) para tener el índice del área." };
+  if (isNum(sc)) {
+    const dTxt = mejorDia ? `${mejorDia.f === hoyLocal() ? "hoy" : etiquetaDia(mejorDia.f)} (índice ${mejorDia.best.score})` : "";
+    if (sc >= 78 && ventPronta) reco = { k: "g", t: "Ir", txt: `Zona ${nivelIndice(sc)} hoy (índice ${sc}) y hay ventana de mar operable desde ${etiquetaHora(ventPronta.a)} por ${ventPronta.h} h. Apuntar a ${fmtPos(celdaHoy.lat, celdaHoy.lon)}.` };
+    else if (sc >= 78) reco = { k: "w", t: "Esperar ventana", txt: `La zona está ${nivelIndice(sc)} (índice ${sc}), pero el mar no da ventana operable en las próximas 24 h.${vent[0] ? ` Primera ventana: ${etiquetaHora(vent[0].a)}, ${vent[0].h} h.` : ""} Mejor día del área: ${dTxt}.` };
+    else if (sc >= 60) reco = { k: "w", t: "Zona de paso", txt: `Condiciones ${nivelIndice(sc)} (índice ${sc}). Conviene revisarla de pasada o esperar al mejor día del área: ${dTxt}.` };
+    else {
+      const alt = TOP[0];
+      reco = { k: "b", t: "Descartar por ahora", txt: `Índice bajo en el área (${sc}).${alt ? ` La mejor zona del radar hoy está en ${fmtPos(alt.lat, alt.lon)} (índice ${alt.score}), a ${Math.round(distMn(pl, po, alt.lat, alt.lon))} mn de ${p.port}.` : ""}` };
+    }
+  }
+  // factores
+  let factoresHTML = "";
+  if (celdaHoy) {
+    const orden = FACTORES.map(f => [f, celdaHoy.comp[f.id]]).sort((a, b) => b[1] - a[1]);
+    const fuertes = orden.slice(0, 2).map(([f]) => fraseFactor(f.id, celdaHoy, true));
+    const debiles = orden.slice(-2).reverse().filter(([, v]) => v < 0.75).map(([f]) => fraseFactor(f.id, celdaHoy, false));
+    factoresHTML = `<p>A favor: ${unirY(fuertes)}.${debiles.length ? ` En contra: ${unirY(debiles)}.` : ""}</p>
+      <div class="factores" style="margin-top:8px">${FACTORES.map(f => { const v = celdaHoy.comp[f.id]; return `<span>${f.n}</span><span class="bar"><i style="width:${Math.round(v * 100)}%"></i></span><b class="mono">${Math.round(v * 100)}</b>`; }).join("")}</div>`;
+  }
+  const tile = (l, v, s) => `<div class="tile"><span class="l">${l}</span><span class="v">${v}</span>${s ? `<span class="s">${s}</span>` : ""}</div>`;
+  const fondo = cercana && isNum(cercana.prof) ? `${Math.round(cercana.prof)} m de fondo` : "";
+  const dCosta = cercana ? `${Math.round(cercana.distKm / 1.852)} mn de la costa` : "";
+  out.innerHTML = `
+    <section class="card">
+      <div class="q-head"><h2>${nombre || "Zona consultada"}</h2>
+        <span class="q-meta">Consultado ${fechaHora(new Date().toISOString())} · radio ${R} mn</span></div>
+      <p class="q-meta" style="margin:6px 0 12px"><span class="mono">${fmtPos(lat, lon)}</span> · ${Math.round(distMn(pl, po, lat, lon))} mn, rumbo ${String(Math.round(rumbo(pl, po, lat, lon))).padStart(3, "0")}° desde ${p.port}${dCosta ? " · " + dCosta : ""}${fondo ? " · " + fondo : ""}</p>
+      <div class="reco ${reco.k}"><b class="t">${reco.t}</b>${reco.txt}</div>
+    </section>
+    <section class="card">
+      <h2>Ahora en el punto</h2>
+      ${ahora ? `<div class="tiles">
+        ${tile("TSM", `${f1(ahora.sst)} °C`, isNum(ahora.sst) ? (ahora.sst >= CALC?.lo && ahora.sst <= CALC?.hi ? "dentro de la ventana" : "fuera de la ventana") : "")}
+        ${tile("Viento", `${f0(ahora.vto)} kn`, `del ${rosa(ahora.vDir)} · racha ${f0(ahora.racha)} kn`)}
+        ${tile("Ola", `${f1(ahora.ola)} m`, `<span class="chip ${op.k}">${op.t}</span>`)}
+        ${tile("Mar de viento", `${f1(ahora.olaV)} m`, "generado por el viento local")}
+        ${tile("Mar de fondo", `${f1(ahora.swell)} m`, isNum(ahora.perS) ? `período ${Math.round(ahora.perS)} s` : "")}
+        ${tile("Corriente", `${isNum(ahora.cur) ? ahora.cur.toFixed(1) : "–"} kn`, `hacia el ${rosa(ahora.curDir)}`)}
+        ${tile("Presión", `${f0(ahora.pres)} hPa`, "")}
+        ${celdaHoy ? tile("Termoclina", `${f0(celdaHoy.zt)} m`, isNum(celdaHoy.zCard) ? `cardumen ≈ ${Math.round(celdaHoy.zCard)} m` : "sin dato de perfiles") : ""}
+        ${celdaHoy ? tile("Clorofila", `${isNum(celdaHoy.chl) ? celdaHoy.chl.toFixed(2) : "–"}`, "mg/m³, último satélite") : ""}
+      </div><p class="note" style="margin-top:6px">Hora del dato: ${etiquetaHora(ahora.t)}. Mar y TSM de Copernicus, viento del modelo meteorológico, ambos vía Open-Meteo.</p>`
+      : `<p class="err">No se pudieron consultar las condiciones del punto: ${errVivo}</p>`}
+    </section>
+    ${filas ? `<section class="card chart72">
+      <h2>Próximas 72 horas</h2>
+<div class="charts2"><div>${grafico72(filas, ahoraISO, [{ k: "vto", n: "viento", color: "var(--ink)" }, { k: "racha", n: "racha", color: "var(--muted)", dash: "4 3", w: 1.3 }], 22, "nudos", "Viento")}</div><div>${grafico72(filas, ahoraISO, [{ k: "ola", n: "ola total", color: "var(--accent)" }, { k: "olaV", n: "mar de viento", color: "var(--muted)", dash: "4 3", w: 1.3 }], 3, "m", "Olas")}</div></div>
+      <h3>Ventanas para operar con cerco</h3>
+      ${vent.length ? `<ul class="ventanas">${vent.slice(0, 5).map(v => `<li><b>${etiquetaHora(v.a)}</b> a <b>${etiquetaHora(v.b)}</b> · ${v.h} h</li>`).join("")}</ul>` : `<p>Sin ventanas de al menos 3 h con olas bajo 3 m y viento bajo 22 kn en las próximas 72 h.</p>`}
+      <p class="note">Ventana = horas seguidas con ola bajo 3 m y viento bajo 22 kn. Ajusta el criterio con la experiencia de los patrones.</p>
+    </section>` : ""}
+    ${celdaHoy ? `<section class="card">
+      <h2>Por qué la zona está así hoy</h2>
+      <p>Mejor celda del área: <span class="mono">${fmtPos(celdaHoy.lat, celdaHoy.lon)}</span>, índice <b>${celdaHoy.score}</b> (${nivelIndice(celdaHoy.score)}). Promedio del área: ${dias[0]?.media ?? "–"}.</p>
+      ${factoresHTML}
+    </section>
+    <section class="card">
+      <h2>Evolución del área, 8 días</h2>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Día</th><th>Mejor índice</th><th>Promedio</th><th>TSM</th><th>Termoclina</th><th>Olas máx</th></tr></thead>
+        <tbody>${dias.map(d => { const b = d.best, o = operable(b ? b.ola : NaN); return `<tr${mejorDia && d.f === mejorDia.f ? ' class="activa"' : ""}><td>${d.f === hoyLocal() ? "Hoy" : etiquetaDia(d.f)}</td><td>${b ? `<span class="scorebar"><i style="width:${b.score}%"></i></span><b class="mono">${b.score}</b>` : "–"}</td><td class="mono">${isNum(d.media) ? d.media : "–"}</td><td class="mono">${b ? f1(b.sst) : "–"}</td><td class="mono">${b ? f0(b.zt) : "–"}</td><td><span class="mono">${b ? f1(b.ola) : "–"}</span> <span class="chip ${o.k}">${o.t}</span></td></tr>`; }).join("")}</tbody>
+      </table></div>
+      <p class="note">La fila marcada es el mejor día del área considerando el índice y el estado del mar.</p>
+    </section>` : `<section class="card"><p>Sin datos del radar para esta posición. Revisa que el punto esté en el mar y dentro de 33°–41°S, o carga el radar.</p></section>`}
+    <section class="card">
+      <h2>Lances cercanos (últimos 10 días)</h2>
+      <p>${LANCES.length ? (lan.length ? `${lan.length} lances dentro de ${R} mn: ${lanPos.length} con captura, ${Math.round(lanT)} t en total.` : `Ningún lance cargado dentro de ${R} mn.`) : "No hay lances cargados. Súbelos en la pestaña Radar → Presión de pesca."}</p>
+    </section>`;
+  out.querySelector("section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+function initConsulta() {
+  const sel = document.getElementById("qLugar");
+  for (const [n] of LUGARES) { const o = document.createElement("option"); o.value = n; o.textContent = n; sel.appendChild(o); }
+  const llenar = () => {
+    const l = LUGARES.find(x => x[0] === sel.value); if (!l) return;
+    const mn = Math.max(0, parseFloat(document.getElementById("qMar").value) || 0);
+    const lon = l[2] - mn / (60 * Math.cos(l[1] * D2R));
+    document.getElementById("qLat").value = Math.abs(l[1]).toFixed(3);
+    document.getElementById("qLon").value = Math.abs(lon).toFixed(3);
+  };
+  sel.addEventListener("change", llenar);
+  document.getElementById("qMar").addEventListener("change", llenar);
+  for (const id of ["qLat", "qLon"]) document.getElementById(id).addEventListener("input", () => { sel.value = ""; });
+  const nombreActual = () => {
+    const l = sel.value, mn = parseFloat(document.getElementById("qMar").value) || 0;
+    return l ? (mn > 0 ? `${mn} mn frente a ${l}` : l) : "";
+  };
+  const ir = () => {
+    const lat = parseCoordTexto(document.getElementById("qLat").value), lon = parseCoordTexto(document.getElementById("qLon").value);
+    if (!isNum(lat) || !isNum(lon)) { document.getElementById("qResultado").innerHTML = `<section class="card err">Escribe una latitud y una longitud válidas, por ejemplo 37°30' y 75°00', o elige un lugar.</section>`; return; }
+    analizarZona(lat, lon, nombreActual());
+  };
+  document.getElementById("btnConsulta").addEventListener("click", ir);
+  for (const id of ["qLat", "qLon"]) document.getElementById(id).addEventListener("keydown", e => { if (e.key === "Enter") ir(); });
+  document.getElementById("btnFichaSel").addEventListener("click", () => {
+    if (!SEL) return;
+    sel.value = "";
+    document.getElementById("qLat").value = Math.abs(SEL.lat).toFixed(3);
+    document.getElementById("qLon").value = Math.abs(SEL.lon).toFixed(3);
+    window.mostrarTab("tabZona");
+    analizarZona(SEL.lat, SEL.lon, `Celda ${fmtPos(SEL.lat, SEL.lon)}`);
+  });
+}
+
+
+// ================================================================== sardina común y anchoveta
+const P_STEP = 0.15, P_LATN = -33.05, P_LATS = -40.85, P_MAXMN = 45;
+const P_KEY = "radarJurel.v2.pel", P_BATI_KEY = "radarJurel.v2.pelBati", P_PREF = "radarJurel.v2.pelPrefs";
+const RIOS = [["Rapel", -33.92, -71.84], ["Mataquito", -35.05, -72.19], ["Maule", -35.31, -72.43], ["Itata", -36.38, -72.87],
+  ["Biobío", -36.82, -73.17], ["Imperial", -38.78, -73.40], ["Toltén", -39.21, -73.24], ["Valdivia", -39.87, -73.40]];
+const FACT_P = [
+  { id: "termico", n: "Térmico", w: 22, d: "Qué tan cerca está la TSM de la ventana de la especie elegida (sardina común 11,5–13,5 °C, anchoveta 12–15 °C, más el ajuste El Niño). Con «Ambas» se usa la mejor de las dos." },
+  { id: "alimento", n: "Alimento", w: 20, d: "Clorofila satelital: estas especies se alimentan de fitoplancton y zooplancton en aguas productivas. El óptimo por defecto es 4 mg/m³ (escala logarítmica). También cuentan los bordes de clorofila." },
+  { id: "surgencia", n: "Surgencia", w: 14, d: "La surgencia moderada fertiliza la costa y la relajación posterior concentra los cardúmenes. El viento norte persistente baja el factor." },
+  { id: "costa", n: "Costa y fondo", w: 12, d: "Preferencia por 0–20 mn de la costa (máximo cerca de 8 mn) y fondos de plataforma (menos de 200 m). Baja sobre el talud y en aguas profundas." },
+  { id: "frente", n: "Frente térmico", w: 10, d: "Gradiente de TSM. En la costa marca el borde del agua surgente, donde se concentra el alimento." },
+  { id: "capa", n: "Capa de mezcla", w: 8, d: "Una capa de mezcla somera (25 m o menos) mantiene el cardumen cerca de la superficie, al alcance del cerco. Usa los perfiles de Copernicus (solo en la versión de GitHub); si no hay dato, queda neutro." },
+  { id: "cohesion", n: "Cohesión", w: 6, d: "Lo inverso a la dispersión: baja con mar de viento fuerte, sin frente y con agua más cálida que la ventana." },
+  { id: "presion", n: "Evidencia de pesca", w: 6, d: "Lances recientes de sardina o anchoveta del CSV (columna especie). Capturas cercanas suben el factor; esfuerzo sin captura lo baja." },
+  { id: "pluma", n: "Pluma de río", w: 4, d: "Cercanía a desembocaduras (Rapel, Mataquito, Maule, Itata, Biobío, Imperial, Toltén, Valdivia). Peso bajo: los estudios en el Itata muestran que la pluma no siempre concentra huevos y larvas." }
+];
+const P_ZONAS = [{ id: "norte", n: "Norte", N: 33, S: 35.5 }, { id: "centro", n: "Centro", N: 35.5, S: 38.5 }, { id: "sur", n: "Sur", N: 38.5, S: 41 }, { id: "todo", n: "Toda", N: 33, S: 41 }];
+const P_ESP = [{ id: "sardina", n: "Sardina común" }, { id: "anchoveta", n: "Anchoveta" }, { id: "ambas", n: "Ambas" }];
+let PDATA = null, PDIA = 0, PCAPA = "score", PSEL = null, PCALC = null, PTOP = [], PESP = "ambas", PZONA = "centro", PCARGANDO = false;
+const PCAPAS = [
+  { id: "score", n: "Índice", lo: 0, hi: 100, ramp: "idx" },
+  { id: "sst", n: "TSM", u: "°C", ramp: "sst" },
+  { id: "chl", n: "Clorofila", u: "mg/m³", ramp: "chl", log: true, need: "chl" },
+  { id: "grad", n: "Frente térmico", u: "°C/km", lo: 0, hi: 0.06, ramp: "idx", f: v => v.toFixed(3) },
+  { id: "olaV", n: "Mar de viento", u: "m", lo: 0, hi: 3, ramp: "ola" },
+  { id: "ola", n: "Olas máx", u: "m", lo: 0, hi: 5, ramp: "ola" },
+  { id: "prof", n: "Fondo", u: "m", lo: 0, hi: 1000, ramp: "prof", need: "bati", f: v => Math.round(v) },
+  { id: "esfuerzo", n: "Presión de pesca", u: "lances pond.", lo: 0, hi: 4, ramp: "ola", need: "lances", f: v => v.toFixed(1) }
+];
+
+function grillaP() {
+  const cells = [];
+  const nR = Math.round((P_LATN - P_LATS) / P_STEP) + 1;
+  for (let r = 0; r < nR; r++) {
+    const lat = +(P_LATS + r * P_STEP).toFixed(3), cl = coastLon(lat), ancho = P_MAXMN / (60 * Math.cos(lat * D2R));
+    const c0 = Math.ceil((cl - ancho + 76) / P_STEP), c1 = Math.floor((cl - 0.06 + 76) / P_STEP);
+    for (let c = c0; c <= c1; c++) {
+      const lon = +(-76 + c * P_STEP).toFixed(3);
+      cells.push({ r, c, lat, lon, distKm: (cl - lon) * 111.2 * Math.cos(lat * D2R) });
+    }
+  }
+  return cells;
+}
+const GP = grillaP();
+const GP_IDX = new Map(GP.map((c, i) => [c.r + "," + c.c, i]));
+
+function mapearCampo(tb, celdas, tol) {
+  const lats = new Set(), lons = new Set(), m = new Map(); let fecha = "";
+  for (const row of tb.rows) {
+    const v = row[tb.iV], la = +(+row[tb.iLat]).toFixed(4), lo = +(+row[tb.iLon]).toFixed(4);
+    lats.add(la); lons.add(lo); if (tb.iT >= 0) fecha = String(row[tb.iT]).slice(0, 10);
+    if (isNum(v)) m.set(la + "," + lo, v);
+  }
+  const LA = [...lats].sort((a, b) => a - b), LO = [...lons].sort((a, b) => a - b);
+  const vals = celdas.map(c => {
+    const a = vecino(LA, c.lat), b = vecino(LO, c.lon);
+    if (a.d > tol || b.d > tol) return null;
+    const v = m.get(LA[a.i] + "," + LO[b.i]); return isNum(v) ? r2(v) : null;
+  });
+  return { fecha, vals };
+}
+async function descargarPel(onProg) {
+  const fuentes = {}, marca = (k, nombre, ok, fecha, det) => { fuentes[k] = { nombre, ok, fecha: fecha || "", det: det || "" }; };
+  const h = hosts(), keyQ = h.key ? `&apikey=${encodeURIComponent(h.key)}` : "";
+  const res = [], LOTE = 110;
+  for (let i = 0; i < GP.length; i += LOTE) {
+    const lote = GP.slice(i, i + LOTE);
+    onProg(`Mar costero: celdas ${i + 1}–${i + lote.length} de ${GP.length}`);
+    res.push(...await getJSON(`${h.marine}/v1/marine?latitude=${lote.map(c => c.lat).join(",")}&longitude=${lote.map(c => c.lon).join(",")}`
+      + `&hourly=sea_surface_temperature,wave_height,wind_wave_height&past_days=4&forecast_days=8&timezone=${encodeURIComponent(TZ)}&cell_selection=sea${keyQ}`));
+    if (i + LOTE < GP.length) await espera(1500);
+  }
+  const fs = new Set();
+  const cel = res.map(m => { const hh = m.hourly || {}, t = hh.time || []; t.forEach(x => fs.add(x.slice(0, 10)));
+    return { sst: porDia(t, hh.sea_surface_temperature, mean), ola: porDia(t, hh.wave_height, maxv), olaV: porDia(t, hh.wind_wave_height, maxv) }; });
+  const fechas = [...fs].sort();
+  const marino = { fechas, cells: cel.map(x => ({ sst: fechas.map(f => r2(x.sst[f])), ola: fechas.map(f => r2(x.ola[f])), olaV: fechas.map(f => r2(x.olaV[f])) })) };
+  marca("marino", "TSM y olas costeras · Copernicus (Open-Meteo)", true, fechas[fechas.length - 1], `${GP.length} celdas de 0,15°`);
+  let viento = DATA && DATA.viento;
+  if (!viento) { try { viento = await descargarViento(onProg); } catch (e) { viento = null; } }
+  marca("viento", "Viento costero · ECMWF", !!viento, viento ? viento.fechas[viento.fechas.length - 1] : "", viento ? "" : "sin datos");
+  let chl = null;
+  onProg("Clorofila costera (VIIRS)");
+  for (const base of ERDDAP.chl) {
+    try {
+      const r = mapearCampo(tabla(await jsonp(erddapURL(base, `chlor_a[(last)][(0.0)][(-33.0):1:(-41.0)][(-75.3):1:(-71.4)]`), 60000)), GP, 0.09);
+      if (!chl || r.fecha > chl.fecha) chl = r;
+      if (diasEntre(r.fecha, hoyLocal()) <= 5) break;
+    } catch (e) { /* siguiente */ }
+  }
+  if (chl) { chl.atraso = diasEntre(chl.fecha, hoyLocal()); marca("chl", "Clorofila · VIIRS 9 km (ERDDAP)", chl.atraso <= 15, chl.fecha, `imagen de hace ${chl.atraso} día(s)`); }
+  else marca("chl", "Clorofila · VIIRS 9 km (ERDDAP)", false, "", "no respondió: el factor alimento queda neutro");
+  let bati = store.get(P_BATI_KEY);
+  if (!bati || bati.n !== GP.length) {
+    onProg("Batimetría costera");
+    try { bati = { n: GP.length, vals: mapearCampo(tabla(await jsonp(erddapURL(ERDDAP.bati, `altitude[(-41.0):6:(-33.0)][(-75.3):6:(-71.4)]`), 60000)), GP, 0.08).vals }; store.set(P_BATI_KEY, bati); }
+    catch (e) { bati = null; }
+  }
+  marca("bati", "Batimetría · ETOPO (ERDDAP)", !!bati, bati ? "fija" : "", bati ? "" : "sin datos: se usa solo la distancia a la costa");
+  return { fetched: new Date().toISOString(), n: GP.length, marino, viento, chl, bati, fuentes };
+}
+
+function prefsP() {
+  const g = id => parseFloat(document.getElementById(id).value), pesos = {};
+  for (const f of FACT_P) { const v = g("pw_" + f.id); pesos[f.id] = isNum(v) && v >= 0 ? v : f.w; }
+  const nz = v => isNum(v) ? v : 0;
+  return { sMin: nz(g("psMin")) || 11.5, sMax: nz(g("psMax")) || 13.5, aMin: nz(g("paMin")) || 12, aMax: nz(g("paMax")) || 15,
+    nino: isNum(g("pNino")) ? g("pNino") : 0, chlOpt: g("pChlOpt") > 0 ? g("pChlOpt") : 4, pesos };
+}
+function lancesPel(esp) {
+  return LANCES.filter(x => x.e && ((esp !== "anchoveta" && x.e.includes("sard")) || (esp !== "sardina" && x.e.includes("anch"))));
+}
+function operableP(ola) {
+  if (!isNum(ola)) return { t: "s/d", k: "w" };
+  if (ola >= 3.5) return { t: "No operable", k: "b" };
+  if (ola >= 2.5) return { t: "Difícil", k: "w" };
+  return { t: "Operable", k: "g" };
+}
+function gIdxDe(c) {          // celda de la grilla del jurel más cercana (para perfiles)
+  let b = -1, bd = 1e9;
+  G.cells.forEach((g, i) => { const d = Math.abs(g.lat - c.lat) + Math.abs(g.lon - c.lon); if (d < bd) { bd = d; b = i; } });
+  return bd <= 0.6 ? b : -1;
+}
+const GP_G = GP.map(gIdxDe);
+
+function calcularDiaP(dp, di) {
+  const p = prefsP(), M = dp.marino, fecha = M.fechas[di];
+  const ventanas = { sardina: [p.sMin + p.nino, p.sMax + p.nino], anchoveta: [p.aMin + p.nino, p.aMax + p.nino] };
+  const val = (arr, r, c) => { const i = GP_IDX.get(r + "," + c); return i === undefined ? NaN : arr[i]; };
+  const sst = M.cells.map(x => isNum(x.sst[di]) ? x.sst[di] : NaN);
+  const chlL = dp.chl ? dp.chl.vals.map(v => isNum(v) ? Math.log10(Math.max(v, 0.01)) : NaN) : null;
+  const grad = (arr, c) => {
+    const dx = P_STEP * 111.2 * Math.cos(c.lat * D2R), dy = P_STEP * 111.2;
+    const gx = dif(val(arr, c.r, c.c - 1), val(arr, c.r, c.c), val(arr, c.r, c.c + 1)) / dx;
+    const gy = dif(val(arr, c.r - 1, c.c), val(arr, c.r, c.c), val(arr, c.r + 1, c.c)) / dy;
+    return (isNum(gx) || isNum(gy)) ? Math.hypot(isNum(gx) ? gx : 0, isNum(gy) ? gy : 0) : NaN;
+  };
+  const GS = GP.map(c => grad(sst, c)), GC = chlL ? GP.map(c => grad(chlL, c)) : null;
+  const vec = (arr, c) => { let m = NaN; for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const v = val(arr, c.r + a, c.c + b); if (isNum(v)) m = isNum(m) ? Math.max(m, v) : v; } return m; };
+  const vd = vientoEnDia(dp.viento, fecha);
+  const ri = DATA && DATA.rtofs ? rtofsEnFecha(DATA.rtofs, fecha) : -1;
+  const hoy = hoyLocal(), ref = fecha > hoy ? hoy : fecha, lan = lancesPel(PESP);
+  const sumaP = Object.values(p.pesos).reduce((a, b) => a + b, 0) || 1;
+  const suit = (t, [lo, hi]) => { const fu = Math.max(0, lo - t, t - hi); return Math.exp(-(fu * fu) / (2 * 0.7 * 0.7)); };
+  const hiMax = PESP === "sardina" ? ventanas.sardina[1] : PESP === "anchoveta" ? ventanas.anchoveta[1] : Math.max(ventanas.sardina[1], ventanas.anchoveta[1]);
+  const celdas = GP.map((c, i) => {
+    const prof = dp.bati ? dp.bati.vals[i] : null;
+    if (isNum(prof) && prof > -3) return null;
+    const s = sst[i], chl = dp.chl ? dp.chl.vals[i] : null, ola = M.cells[i].ola[di], olaV = M.cells[i].olaV[di];
+    let termico = NEUTRO;
+    if (isNum(s)) termico = PESP === "ambas" ? Math.max(suit(s, ventanas.sardina), suit(s, ventanas.anchoveta)) : suit(s, ventanas[PESP]);
+    let alimento = NEUTRO;
+    if (isNum(chl)) {
+      const lg = Math.log10(Math.max(chl, 0.01)), opt = Math.exp(-((lg - Math.log10(p.chlOpt)) ** 2) / (2 * 0.45 * 0.45));
+      const borde = GC ? 1 - Math.exp(-(vec(GC, c) || 0) / 0.01) : 0;
+      alimento = clamp(0.7 * opt + 0.3 * borde, 0.03, 1);
+      if (dp.chl.atraso > 15) alimento = 0.5 * alimento + 0.5 * NEUTRO;
+    }
+    const cui3 = interpLat(vd, c.lat, "cui3"), relax = interpLat(vd, c.lat, "relax"), n72 = interpLat(vd, c.lat, "norte72");
+    const surgencia = isNum(cui3) ? clamp(0.45 + 0.3 * clamp(cui3 / 150, 0, 1) + 0.35 * clamp((isNum(relax) ? relax : 0) / 150, 0, 1) - (n72 >= 24 ? 0.2 : 0), 0.05, 1) : NEUTRO;
+    const dmn = c.distKm / 1.852;
+    let costa = Math.max(0.1, Math.exp(-(((dmn - 8) / 14) ** 2)));
+    if (isNum(prof)) { const z = -prof; costa *= z < 200 ? 1 : z < 500 ? 0.75 : 0.5; }
+    const gr = vec(GS, c), frente = isNum(gr) ? clamp(1 - Math.exp(-gr / 0.01), 0.05, 1) : 0.4;
+    const gi = GP_G[i], pr = ri >= 0 && gi >= 0 ? DATA.rtofs.cells[gi][ri] : null;
+    const capa = pr && isNum(pr.mld) ? (pr.mld <= 25 ? 1 : Math.max(0.2, Math.exp(-(((pr.mld - 25) / 25) ** 2)))) : NEUTRO;
+    const pres = lan.length ? presionEn(c.lat, c.lon, lan, ref, 0.15) : null;
+    let presion = NEUTRO, presDisp = 0;
+    if (pres && pres.E > 0.05) {
+      const conf = clamp(pres.E / 2, 0, 1), evid = clamp(0.35 + 0.65 * (1 - Math.exp(-pres.C / 40)), 0, 1);
+      const agot = (1 - (isNum(pres.exito) ? pres.exito : 0)) * clamp(pres.E / 4, 0, 1);
+      presion = clamp(NEUTRO + conf * (evid - NEUTRO) - 0.3 * agot, 0.05, 1); presDisp = clamp(pres.E3 / 6, 0, 1);
+    }
+    const partes = [];
+    if (isNum(olaV)) partes.push([0.35, clamp(olaV / 2, 0, 1)]);
+    partes.push([0.25, 1 - frente]);
+    if (isNum(s)) partes.push([0.2, clamp((s - hiMax) / 2, 0, 1)]);
+    if (pres) partes.push([0.2, presDisp]);
+    const ws = partes.reduce((a, x) => a + x[0], 0), dispersion = ws ? partes.reduce((a, x) => a + x[0] * x[1], 0) / ws : NaN;
+    const cohesion = isNum(dispersion) ? clamp(1 - 0.8 * dispersion, 0.05, 1) : NEUTRO;
+    const dRio = Math.min(...RIOS.map(([, la, lo]) => distMn(la, lo, c.lat, c.lon)));
+    const pluma = 0.5 + 0.5 * Math.exp(-((dRio / 15) ** 2));
+    const comp = { termico, alimento, surgencia, costa, frente, capa, cohesion, presion, pluma };
+    let lg = 0; for (const f of FACT_P) lg += p.pesos[f.id] * Math.log(clamp(comp[f.id], 0.03, 1));
+    return { ...c, score: Math.round(Math.exp(lg / sumaP) * 100), comp, sst: s, chl, ola, olaV, grad: gr,
+      prof: isNum(prof) ? -prof : NaN, dmn, dRio, mld: pr ? pr.mld : NaN, dispersion, esfuerzo: pres ? pres.E : NaN };
+  }).filter(Boolean);
+  return { fecha, celdas, viento: vd, ventanas };
+}
+function enZonaP(c) { const z = P_ZONAS.find(x => x.id === PZONA); return c.lat <= -z.N + 1e-6 && c.lat >= -z.S - 1e-6; }
+function topSep(celdas, n, sep) {
+  const orden = celdas.filter(c => isNum(c.sst)).sort((a, b) => b.score - a.score), el = [];
+  for (const c of orden) { if (el.every(e => Math.abs(e.lat - c.lat) > sep || Math.abs(e.lon - c.lon) > sep)) el.push(c); if (el.length >= n) break; }
+  return el;
+}
+function zonaNombreP(lat) {
+  if (lat > -34.2) return "Valparaíso–San Antonio"; if (lat > -35.1) return "Pichilemu–Iloca"; if (lat > -35.9) return "Constitución–Curanipe";
+  if (lat > -36.45) return "Cobquecura–Itata"; if (lat > -36.9) return "Talcahuano–San Vicente"; if (lat > -37.35) return "Golfo de Arauco";
+  if (lat > -38.0) return "Lebu"; if (lat > -38.9) return "Tirúa–Puerto Saavedra"; if (lat > -39.6) return "Queule–Mehuín"; return "Valdivia–Corral";
+}
+
+// ---------------- mapa costero
+const pcv = document.getElementById("pMap"), pctx = pcv.getContext("2d");
+let PW = 0, PH = 0, PVIEW = null;
+function vistaP() {
+  const z = P_ZONAS.find(x => x.id === PZONA);
+  const latMax = -z.N + 0.2, latMin = -z.S - 0.2;
+  const lonMin = Math.min(...GP.filter(c => c.lat <= latMax && c.lat >= latMin).map(c => c.lon)) - 0.25;
+  const lonMax = Math.max(...COSTA.filter(([la]) => la <= latMax + 0.3 && la >= latMin - 0.3).map(([, lo]) => lo)) + 0.45;
+  return { latMin, latMax, lonMin, lonMax };
+}
+function tamP() {
+  PVIEW = vistaP();
+  const w = pcv.parentElement.clientWidth || 600, latMid = (PVIEW.latMin + PVIEW.latMax) / 2;
+  const ratio = ((PVIEW.lonMax - PVIEW.lonMin) * Math.cos(latMid * D2R)) / (PVIEW.latMax - PVIEW.latMin);
+  const h = Math.min(w / ratio, Math.max(420, window.innerHeight * 0.82)), wAdj = Math.min(w, h * ratio), dpr = window.devicePixelRatio || 1;
+  pcv.style.width = wAdj + "px"; pcv.style.height = h + "px"; pcv.width = Math.round(wAdj * dpr); pcv.height = Math.round(h * dpr);
+  pctx.setTransform(dpr, 0, 0, dpr, 0, 0); PW = wAdj; PH = h;
+}
+const pproj = (lat, lon) => [(lon - PVIEW.lonMin) / (PVIEW.lonMax - PVIEW.lonMin) * PW, (PVIEW.latMax - lat) / (PVIEW.latMax - PVIEW.latMin) * PH];
+const punproj = (x, y) => [PVIEW.latMax - y / PH * (PVIEW.latMax - PVIEW.latMin), PVIEW.lonMin + x / PW * (PVIEW.lonMax - PVIEW.lonMin)];
+function dibujarP() {
+  if (!PW) tamP();
+  const ctx = pctx; ctx.clearRect(0, 0, PW, PH); ctx.fillStyle = css("--sea"); ctx.fillRect(0, 0, PW, PH);
+  const capa = PCAPAS.find(c => c.id === PCAPA), h = P_STEP / 2;
+  if (PCALC) {
+    const vc = c => capa.log && isNum(c[capa.id]) ? Math.log10(Math.max(c[capa.id], 0.01)) : c[capa.id];
+    let lo = capa.lo, hi = capa.hi;
+    if (lo === undefined) { const v = PCALC.celdas.map(vc).filter(isNum).sort((a, b) => a - b); lo = v.length ? Math.floor(v[Math.floor(v.length * 0.02)] * 2) / 2 : 0; hi = v.length ? Math.ceil(v[Math.floor(v.length * 0.98)] * 2) / 2 : 1; if (hi <= lo) hi = lo + 0.5; }
+    for (const c of PCALC.celdas) {
+      const v = vc(c); if (!isNum(v)) continue;
+      const [x1, y1] = pproj(c.lat + h, c.lon - h), [x2, y2] = pproj(c.lat - h, c.lon + h);
+      ctx.fillStyle = colorRamp(capa.ramp, (v - lo) / (hi - lo)); ctx.globalAlpha = 0.9; ctx.fillRect(x1, y1, x2 - x1 + 0.6, y2 - y1 + 0.6); ctx.globalAlpha = 1;
+    }
+    const lc = document.getElementById("pLeg"), lx = lc.getContext("2d");
+    for (let i = 0; i < lc.width; i++) { lx.fillStyle = colorRamp(capa.ramp, i / (lc.width - 1)); lx.fillRect(i, 0, 1, lc.height); }
+    const fmt = capa.log ? (v => (10 ** v).toFixed(v < 0 ? 2 : 1)) : (capa.f || (v => (Math.round(v * 10) / 10).toString()));
+    document.getElementById("pLegLo").textContent = fmt(lo); document.getElementById("pLegHi").textContent = fmt(hi);
+    document.getElementById("pLegName").textContent = capa.n + (capa.u ? ` (${capa.u})` : "");
+  }
+  ctx.beginPath(); COSTA.forEach(([la, lo], i) => { const [x, y] = pproj(la, lo); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+  const [xe] = pproj(0, PVIEW.lonMax + 2); ctx.lineTo(xe, pproj(COSTA[COSTA.length - 1][0], 0)[1]); ctx.lineTo(xe, pproj(COSTA[0][0], 0)[1]); ctx.closePath();
+  ctx.fillStyle = css("--land"); ctx.fill(); ctx.strokeStyle = css("--coast"); ctx.lineWidth = 1.3; ctx.stroke();
+  for (const is of ISLAS) { const [x, y] = pproj(is.lat, is.lon); ctx.beginPath(); ctx.arc(x, y, Math.max(3, is.r / (PVIEW.lonMax - PVIEW.lonMin) * PW), 0, 2 * Math.PI); ctx.fillStyle = css("--land"); ctx.fill(); ctx.stroke(); }
+  // línea de 5 mn
+  ctx.beginPath(); ctx.setLineDash([4, 4]); ctx.strokeStyle = css("--ink"); ctx.lineWidth = 1; ctx.globalAlpha = 0.6;
+  for (let la = PVIEW.latMax, k = 0; la >= PVIEW.latMin; la -= 0.05, k++) { const [x, y] = pproj(la, coastLon(la) - 5 / (60 * Math.cos(la * D2R))); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+  ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+  ctx.font = `11px ${css("--f-mono")}`; ctx.fillStyle = css("--muted"); ctx.strokeStyle = css("--line"); ctx.lineWidth = 0.6; ctx.setLineDash([3, 4]);
+  for (let la = Math.ceil(PVIEW.latMin * 2) / 2; la <= PVIEW.latMax; la += 0.5) { const [, y] = pproj(la, 0); ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(PW, y); ctx.stroke(); ctx.fillText(`${gm(la, "S")}`, 4, y - 3); }
+  for (let lo = Math.ceil(PVIEW.lonMin); lo <= PVIEW.lonMax; lo += 1) { const [x] = pproj(0, lo); ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, PH); ctx.stroke(); ctx.fillText(`${-lo}°W`, x + 3, PH - 5); }
+  ctx.setLineDash([]);
+  for (const [n, la, lo] of RIOS) {
+    if (la > PVIEW.latMax || la < PVIEW.latMin) continue;
+    const [x, y] = pproj(la, lo); ctx.fillStyle = "#2f6db5"; ctx.beginPath(); ctx.moveTo(x, y - 5); ctx.lineTo(x + 5, y + 4); ctx.lineTo(x - 5, y + 4); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = css("--muted"); ctx.font = `11px ${css("--f-body")}`; ctx.fillText(n, x + 7, y + 4);
+  }
+  if (PCAPA === "esfuerzo" && PCALC) {
+    const ref = PCALC.fecha > hoyLocal() ? hoyLocal() : PCALC.fecha;
+    for (const x of lancesPel(PESP)) { const e = diasEntre(x.f, ref); if (e < 1 || e > 10) continue; const [px, py] = pproj(x.la, x.lo); ctx.beginPath(); ctx.arc(px, py, x.c > 0 ? 4 : 3, 0, 2 * Math.PI); ctx.fillStyle = x.c > 0 ? css("--good") : css("--bad"); ctx.fill(); }
+  }
+  ctx.font = `600 12px ${css("--f-body")}`;
+  for (const [n, [la, lo]] of Object.entries(PUERTOS)) {
+    if (la > PVIEW.latMax || la < PVIEW.latMin) continue;
+    const [x, y] = pproj(la, lo); ctx.fillStyle = css("--ink"); ctx.beginPath(); ctx.arc(x, y, 3.5, 0, 2 * Math.PI); ctx.fill();
+    const tw = ctx.measureText(n).width; ctx.fillText(n, x + 6 + tw > PW - 2 ? x - 6 - tw : x + 6, y + (n === "Talcahuano" ? -4 : n === "Coronel" ? 11 : 4));
+  }
+  PTOP.forEach((c, i) => {
+    const [x, y] = pproj(c.lat, c.lon), sel = PSEL && PSEL.lat === c.lat && PSEL.lon === c.lon;
+    ctx.beginPath(); ctx.arc(x, y, sel ? 12 : 9, 0, 2 * Math.PI); ctx.fillStyle = css("--panel"); ctx.fill(); ctx.lineWidth = sel ? 3 : 2; ctx.strokeStyle = css("--accent"); ctx.stroke();
+    ctx.fillStyle = css("--accent"); ctx.font = `700 12px ${css("--f-mono")}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(i + 1), x, y + 0.5); ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+  });
+}
+function celdaEnP(ev) {
+  if (!PCALC) return null;
+  const r = pcv.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top, [lat, lon] = punproj(x, y);
+  let best = null, bd = 1e9; for (const c of PCALC.celdas) { const d = Math.abs(c.lat - lat) + Math.abs(c.lon - lon); if (d < bd) { bd = d; best = c; } }
+  return bd <= P_STEP * 1.2 ? { c: best, x, y } : null;
+}
+function tooltipP(hit) {
+  const tip = document.getElementById("pTip"); if (!hit) { tip.hidden = true; return; }
+  const c = hit.c, [pl, po] = PUERTOS[prefs().port], op = operableP(c.ola);
+  tip.innerHTML = `<div class="mono" style="font-weight:600">${fmtPos(c.lat, c.lon)} · índice ${c.score}</div>
+    <div>TSM <b>${f1(c.sst)}</b> °C · Chl <b>${isNum(c.chl) ? c.chl.toFixed(2) : "–"}</b> · mezcla <b>${f0(c.mld)}</b> m</div>
+    <div>${c.dmn.toFixed(1)} mn de costa · fondo <b>${f0(c.prof)}</b> m · olas <b>${f1(c.ola)}</b> m <span class="chip ${op.k}">${op.t}</span></div>
+    <div>${Math.round(distMn(pl, po, c.lat, c.lon))} mn, rumbo ${Math.round(rumbo(pl, po, c.lat, c.lon))}° desde ${prefs().port}</div>
+    <div class="comps">${FACT_P.map(f => `<span>${f.n}</span><i style="width:${Math.round(c.comp[f.id] * 100)}%"></i><b>${Math.round(c.comp[f.id] * 100)}</b>`).join("")}</div>`;
+  tip.hidden = false;
+  const box = document.getElementById("pMapbox").getBoundingClientRect();
+  let left = hit.x + 14, top = hit.y + 14; if (left + 280 > box.width) left = Math.max(0, hit.x - 290); if (top + 300 > box.height) top = Math.max(0, hit.y - 310);
+  tip.style.left = left + "px"; tip.style.top = top + "px";
+}
+pcv.addEventListener("mousemove", ev => tooltipP(celdaEnP(ev)));
+pcv.addEventListener("mouseleave", () => tooltipP(null));
+pcv.addEventListener("click", ev => { const h = celdaEnP(ev); if (h) { PSEL = h.c; dibujarP(); tooltipP(h); } });
+
+// ---------------- paneles
+function botonesP(contId, lista, actual, onPick) {
+  const el = document.getElementById(contId); el.innerHTML = "";
+  for (const x of lista) { const b = document.createElement("button"); b.type = "button"; b.className = "layer"; b.textContent = x.n; b.setAttribute("aria-pressed", String(x.id === actual)); b.addEventListener("click", () => onPick(x.id)); el.appendChild(b); }
+}
+function vistaPel() {
+  botonesP("pEspecie", P_ESP, PESP, id => { PESP = id; guardarP(); vistaPel(); });
+  botonesP("pZona", P_ZONAS, PZONA, id => { PZONA = id; PSEL = null; guardarP(); tamP(); vistaPel(); });
+  const capasOk = PCAPAS.map(c => ({ ...c, ok: !c.need || (c.need === "lances" ? lancesPel(PESP).length > 0 : !!(PDATA && PDATA[c.need])) }));
+  if (!capasOk.find(c => c.id === PCAPA).ok) PCAPA = "score";
+  const lc = document.getElementById("pLayers"); lc.innerHTML = "";
+  for (const c of capasOk) { const b = document.createElement("button"); b.type = "button"; b.className = "layer"; b.textContent = c.n; b.disabled = !c.ok; b.setAttribute("aria-pressed", String(c.id === PCAPA)); b.addEventListener("click", () => { PCAPA = c.id; vistaPel(); }); lc.appendChild(b); }
+  const veda = document.getElementById("pVeda").value, vb = document.getElementById("pVedaBanner");
+  vb.hidden = veda === "abierta";
+  vb.innerHTML = veda === "abierta" ? "" : `<b>${veda === "reclutamiento" ? "Veda de reclutamiento" : "Veda reproductiva"} marcada.</b> Mientras dure, la captura de sardina común y anchoveta está prohibida en las regiones que indique Subpesca. Usa el mapa solo para seguimiento.`;
+  const fu = document.getElementById("pFuentes");
+  fu.innerHTML = PDATA ? Object.values(PDATA.fuentes).map(s => `<div><span class="dot ${s.ok ? "ok" : s.fecha ? "old" : "err"}"></span><span>${s.nombre}</span><span class="dt">${s.fecha}</span>${s.det ? `<small>${s.det}</small>` : ""}</div>`).join("")
+    + `<div><span class="dot ${DATA && DATA.rtofs ? "ok" : ""}"></span><span>Capa de mezcla · perfiles Copernicus</span><span class="dt"></span><small>${DATA && DATA.rtofs ? "desde la tarea diaria de GitHub" : "sin dato en esta versión: el factor queda neutro"}</small></div>`
+    + `<div><span class="dot ${lancesPel(PESP).length ? "ok" : ""}"></span><span>Lances de sardina / anchoveta</span><span class="dt"></span><small>${lancesPel(PESP).length ? lancesPel(PESP).length + " registros" : "sin lances con columna especie: el factor queda neutro"}</small></div>` : "";
+  if (!PDATA) { tamP(); dibujarP(); return; }
+  const F = PDATA.marino.fechas, hoy = hoyLocal(), ini = Math.max(0, F.indexOf(hoy));
+  if (PDIA < ini || PDIA >= F.length) PDIA = ini;
+  PCALC = calcularDiaP(PDATA, PDIA);
+  PTOP = topSep(PCALC.celdas.filter(enZonaP), 8, 0.3);
+  // días
+  const cont = document.getElementById("pDays"); cont.innerHTML = ""; const res = [];
+  for (let k = 0; k < 8 && ini + k < F.length; k++) {
+    const di = ini + k, calc = di === PDIA ? PCALC : calcularDiaP(PDATA, di), top = topSep(calc.celdas.filter(enZonaP), 5, 0.3);
+    const olas = mean(top.map(c => c.ola)); res.push({ di, sc: Math.round(mean(top.map(c => c.score))), olas, op: operableP(olas) });
+  }
+  const ef = r => (isNum(r.sc) ? r.sc : 0) * ({ g: 1, w: 0.8, b: 0.4 }[r.op.k] || 0.8), mejor = res.reduce((a, b) => ef(b) > ef(a) ? b : a, res[0]);
+  for (const r of res) {
+    const b = document.createElement("button"), f = F[r.di]; b.type = "button"; b.className = "day"; b.setAttribute("aria-pressed", String(r.di === PDIA));
+    b.innerHTML = `<span class="dn">${f === hoy ? "Hoy" : etiquetaDia(f)}</span><span class="bar"><i style="width:${isNum(r.sc) ? r.sc : 0}%"></i></span><span class="sc">${isNum(r.sc) ? r.sc : "–"} <span class="chip ${r.op.k}">${isNum(r.olas) ? r.olas.toFixed(1) + " m" : "s/d"}</span></span><span class="best">${r === mejor ? "Mejor ventana" : ""}</span>`;
+    b.addEventListener("click", () => { PDIA = r.di; PSEL = null; vistaPel(); }); cont.appendChild(b);
+  }
+  // tabla
+  const [pl, po] = PUERTOS[prefs().port], tb = document.getElementById("pTbody");
+  document.getElementById("pThDist").textContent = `mn · rumbo (${prefs().port})`; tb.innerHTML = "";
+  PTOP.forEach((c, i) => {
+    const op = operableP(c.ola), tr = document.createElement("tr"); tr.className = "pick"; tr.tabIndex = 0;
+    tr.innerHTML = `<td class="rank">${i + 1}</td><td class="mono">${fmtPos(c.lat, c.lon)}</td><td><span class="scorebar"><i style="width:${c.score}%"></i></span><b class="mono">${c.score}</b></td>
+      <td class="mono">${f1(c.sst)}</td><td class="mono">${isNum(c.chl) ? c.chl.toFixed(1) : "–"}</td><td class="mono">${c.dmn.toFixed(0)}</td><td class="mono">${f0(c.prof)}</td>
+      <td><span class="mono">${f1(c.ola)}</span> <span class="chip ${op.k}">${op.t}</span></td><td class="mono">${Math.round(distMn(pl, po, c.lat, c.lon))} · ${String(Math.round(rumbo(pl, po, c.lat, c.lon))).padStart(3, "0")}°</td>`;
+    const go = () => { PSEL = c; dibujarP(); }; tr.addEventListener("click", go); tr.addEventListener("keydown", e => { if (e.key === "Enter") go(); }); tb.appendChild(tr);
+  });
+  // lectura
+  const el = document.getElementById("pVerdict"), esp = PESP === "ambas" ? "sardina común y anchoveta" : P_ESP.find(x => x.id === PESP).n.toLowerCase();
+  document.getElementById("pVTitle").textContent = `Lectura ${PCALC.fecha === hoy ? "de hoy" : "del " + etiquetaDia(PCALC.fecha)}`;
+  if (!PTOP.length) el.textContent = "Sin celdas con datos en la zona elegida.";
+  else {
+    const t1 = PTOP[0], zonas = [...new Set(PTOP.slice(0, 3).map(c => zonaNombreP(c.lat)))], op = operableP(t1.ola);
+    const orden = FACT_P.filter(x => prefsP().pesos[x.id] > 0).map(x => [x.n, t1.comp[x.id]]).sort((a, b) => a[1] - b[1]);
+    const v37 = PCALC.viento.find(v => v.lat === -37) || {};
+    let viento = "sin datos de viento";
+    if (isNum(v37.cui3)) viento = v37.norte72 >= 24 ? "viento norte persistente: la surgencia está cortada" : (isNum(v37.relax) && v37.relax > 60) ? "relajación tras un pulso de surgencia: buena condición de agregación costera" : v37.cui3 > 80 ? "surgencia activa con viento sur" : "viento débil o variable";
+    const vs = PCALC.ventanas, vtxt = PESP === "ambas" ? `sardina ${vs.sardina[0].toFixed(1)}–${vs.sardina[1].toFixed(1)} °C, anchoveta ${vs.anchoveta[0].toFixed(1)}–${vs.anchoveta[1].toFixed(1)} °C` : `${vs[PESP][0].toFixed(1)}–${vs[PESP][1].toFixed(1)} °C`;
+    el.innerHTML = `${vb.hidden ? "" : `<span class="chip w">En veda</span> `}Para <b>${esp}</b>, mayor índice frente a <strong>${unirY(zonas)}</strong>. El mejor caladero es <span class="mono">${fmtPos(t1.lat, t1.lon)}</span>, a ${t1.dmn.toFixed(0)} mn de la costa y ${Math.round(distMn(pl, po, t1.lat, t1.lon))} mn de ${prefs().port}, con índice ${t1.score}, TSM ${f1(t1.sst)} °C y clorofila ${isNum(t1.chl) ? t1.chl.toFixed(1) + " mg/m³" : "sin dato"}.
+      Punto fuerte: <b>${orden[orden.length - 1][0].toLowerCase()}</b> (${Math.round(orden[orden.length - 1][1] * 100)}); débil: <b>${orden[0][0].toLowerCase()}</b> (${Math.round(orden[0][1] * 100)}).
+      En la costa del Biobío hay ${viento}. Mar para embarcaciones menores: <span class="chip ${op.k}">${op.t}</span>
+      ${mejor ? `<br>Mejor día de la semana: <strong>${F[mejor.di] === hoy ? "hoy" : etiquetaDia(F[mejor.di])}</strong>.` : ""}<br><span class="note">Ventana térmica: ${vtxt}.</span>`;
+  }
+  tamP(); dibujarP();
+}
+function guardarP() {
+  const o = { esp: PESP, zona: PZONA, veda: document.getElementById("pVeda").value, pesos: prefsP().pesos };
+  for (const id of ["psMin", "psMax", "paMin", "paMax", "pNino", "pChlOpt"]) o[id] = parseFloat(document.getElementById(id).value);
+  store.set(P_PREF, o);
+}
+async function cargarPel(forzar) {
+  if (PCARGANDO) return;
+  const c = store.get(P_KEY), valido = c && c.n === GP.length && c.marino, fresco = valido && Date.now() - new Date(c.fetched).getTime() < REFRESH_MS;
+  if (valido && !PDATA) { PDATA = c; vistaPel(); }
+  const st = (k, t) => { document.getElementById("pDot").className = "dot " + k; document.getElementById("pStatus").textContent = t; };
+  if (fresco && !forzar) { st("ok", `Datos del ${fechaHora(c.fetched)}`); return; }
+  PCARGANDO = true; document.getElementById("pRefresh").disabled = true; document.getElementById("pErr").hidden = true;
+  try {
+    const d = await descargarPel(m => st("load", m + "…"));
+    PDATA = d; if (!store.set(P_KEY, d)) store.del(P_KEY);
+    st("ok", `Datos del ${fechaHora(d.fetched)}`); vistaPel();
+  } catch (e) {
+    const b = document.getElementById("pErr"); b.hidden = false; b.textContent = e.message + (PDATA ? ` Se muestran los datos del ${fechaHora(PDATA.fetched)}.` : "");
+    st("err", PDATA ? `Datos del ${fechaHora(PDATA.fetched)} (no se pudo actualizar)` : "Sin datos");
+  } finally { PCARGANDO = false; document.getElementById("pRefresh").disabled = false; }
+}
+function initPel() {
+  const pr = store.get(P_PREF) || {};
+  if (pr.esp) PESP = pr.esp; if (pr.zona) PZONA = pr.zona; if (pr.veda) document.getElementById("pVeda").value = pr.veda;
+  for (const id of ["psMin", "psMax", "paMin", "paMax", "pNino", "pChlOpt"]) if (isNum(pr[id])) document.getElementById(id).value = pr[id];
+  const pw = pr.pesos || {};
+  document.getElementById("pPesos").innerHTML = FACT_P.map(f => `<label for="pw_${f.id}">${f.n}<input type="number" id="pw_${f.id}" min="0" max="50" step="1" value="${isNum(pw[f.id]) ? pw[f.id] : f.w}"></label>`).join("");
+  document.getElementById("pCompList").innerHTML = FACT_P.map(f => `<li><b>${f.n}.</b> ${f.d}</li>`).join("");
+  const cambio = () => { guardarP(); vistaPel(); };
+  for (const id of ["psMin", "psMax", "paMin", "paMax", "pNino", "pChlOpt", "pVeda", ...FACT_P.map(f => "pw_" + f.id)]) document.getElementById(id).addEventListener("change", cambio);
+  document.getElementById("pBtnPesos").addEventListener("click", () => { for (const f of FACT_P) document.getElementById("pw_" + f.id).value = f.w; cambio(); });
+  document.getElementById("pRefresh").addEventListener("click", () => cargarPel(true));
+  let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (!document.getElementById("vistaPel").hidden) { tamP(); dibujarP(); } }, 150); });
+  window.abrirPel = () => { vistaPel(); cargarPel(false); };
+  vistaPel();
+}
+
+// ================================================================== inicio
+(function init() {
+  const pr = store.get(PREF_KEY) || {};
+  const portSel = document.getElementById("port");
+  for (const n of Object.keys(PUERTOS)) { const o = document.createElement("option"); o.value = n; o.textContent = n; portSel.appendChild(o); }
+  portSel.value = pr.port && PUERTOS[pr.port] ? pr.port : "Coronel";
+  for (const k of ["tMin", "tMax", "nino", "red", "distTip", "wML"]) if (isNum(pr[k])) document.getElementById(k).value = pr[k];
+  renderPesos();
+  // zona de búsqueda
+  const zg = store.get(ZONA_KEY);
+  if (zg) {
+    if (isNum(zg.N)) document.getElementById("zN").value = zg.N;
+    if (isNum(zg.S)) document.getElementById("zS").value = zg.S;
+    if (isNum(zg.dMin)) document.getElementById("zDmin").value = zg.dMin;
+    if (isNum(zg.dMax) && zg.dMax < 9999) document.getElementById("zDmax").value = zg.dMax;
+    if (isNum(zg.port)) document.getElementById("zPort").value = zg.port;
+  }
+  for (const id of ["zN", "zS", "zDmin", "zDmax", "zPort"]) document.getElementById(id).addEventListener("change", () => { guardarZona(); SEL = null; actualizarVista(); });
+  renderPresets(); renderZonas();
+  // pestañas
+  const tabs = [["tabRadar", "vistaRadar"], ["tabPel", "vistaPel"], ["tabZona", "vistaZona"], ["tabGlos", "vistaGlos"]];
+  const mostrarTab = id => {
+    for (const [t, v] of tabs) {
+      const on = t === id;
+      document.getElementById(t).setAttribute("aria-selected", String(on));
+      document.getElementById(v).hidden = !on;
+    }
+    store.set("radarJurel.v2.tab", id);
+    if (id === "tabRadar") { tamMapa(); dibujar(); }
+    if (id === "tabPel" && window.abrirPel) window.abrirPel();
+  };
+  window.mostrarTab = mostrarTab;
+  for (const [t] of tabs) document.getElementById(t).addEventListener("click", () => mostrarTab(t));
+  const tabGuardada = store.get("radarJurel.v2.tab");
+  initConsulta();
+  initPel();
+  if (tabGuardada === "tabGlos" || tabGuardada === "tabZona" || tabGuardada === "tabPel") mostrarTab(tabGuardada);
+  // buscador del glosario
+  document.getElementById("glBuscar").addEventListener("input", ev => {
+    const q = ev.target.value.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    let vis = 0;
+    for (const dt of document.querySelectorAll("#glosario dt")) {
+      const dd = dt.nextElementSibling;
+      const txt = (dt.textContent + " " + dd.textContent).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      const ok = !q || txt.includes(q);
+      dt.hidden = !ok; dd.hidden = !ok; if (ok) vis++;
+    }
+    document.getElementById("glVacio").hidden = vis > 0;
+  });
+  const latSel = document.getElementById("cuiLat");
+  for (const [l] of PUNTOS_VIENTO) { const o = document.createElement("option"); o.value = l; o.textContent = `${-l}°S`; latSel.appendChild(o); }
+  latSel.value = String(CUI_LAT);
+  latSel.addEventListener("change", () => { CUI_LAT = +latSel.value; renderCui(); });
+  for (const id of ["tMin", "tMax", "nino", "red", "distTip", "wML", "port"]) document.getElementById(id).addEventListener("change", guardarYRecalcular);
+  document.getElementById("btnPesos").addEventListener("click", () => {
+    for (const f of FACTORES) document.getElementById("w_" + f.id).value = f.w; guardarYRecalcular();
+  });
+  const k = store.get(KEY_KEY); if (k) document.getElementById("apikey").value = k;
+  document.getElementById("btnKey").addEventListener("click", () => { store.set(KEY_KEY, document.getElementById("apikey").value.trim()); cargar(true); });
+  document.getElementById("csvLances").addEventListener("change", ev => {
+    const file = ev.target.files && ev.target.files[0]; if (!file) return;
+    const fr = new FileReader();
+    fr.onload = () => {
+      try { LANCES = leerCSV(String(fr.result)); store.set(LANCES_KEY, LANCES); mostrarError(null); CAPA = "esfuerzo"; actualizarVista(); }
+      catch (e) { mostrarError("No se pudo leer el CSV de lances: " + e.message); }
+    };
+    fr.readAsText(file);
+  });
+  document.getElementById("btnBorrarLances").addEventListener("click", () => { LANCES = []; store.del(LANCES_KEY); document.getElementById("csvLances").value = ""; actualizarVista(); });
+  document.getElementById("btnRefresh").addEventListener("click", () => cargar(true));
+  let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { tamMapa(); dibujar(); }, 120); });
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", dibujar);
+  tamMapa(); actualizarVista();
+  cargar(false);
+  setInterval(() => cargar(false), 15 * 60 * 1000);
+})();
+</script>
+</body>
+</html>
