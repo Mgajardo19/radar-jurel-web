@@ -337,7 +337,7 @@ pre.csv { background: var(--paper); border: 1px solid var(--line); border-radius
       <label for="nino">Ajuste El Niño (°C)<input type="number" id="nino" step="0.25" value="0.5"></label>
       <label for="red">Alcance de la red (m)<input type="number" id="red" step="10" value="120"></label>
       <label for="distTip">Distancia típica de pesca (mn)<input type="number" id="distTip" step="5" min="5" value="25"></label>
-      <label for="wML">Peso del modelo ML (%)<input type="number" id="wML" step="10" min="0" max="100" value="50"></label>
+      <label for="wML">Peso del modelo ML (%)<input type="number" id="wML" step="10" min="0" max="100" value="30"></label>
       <label for="port">Distancias desde <select id="port"></select></label>
     </div>
     <p class="note" id="mlSug" hidden style="margin-top:10px"></p>
@@ -502,7 +502,7 @@ pre.csv { background: var(--paper); border: 1px solid var(--line); border-radius
           <tr><td>Alimento</td><td>14</td><td>La clorofila está cerca de 0,8 mg/m³ o hay un borde de clorofila cerca.</td><td>Satélite VIIRS</td></tr>
           <tr><td>Frente térmico</td><td>12</td><td>La TSM cambia rápido en distancias cortas.</td><td>Copernicus</td></tr>
           <tr><td>Cohesión</td><td>10</td><td>Poco mar de viento, capa de mezcla somera, frente marcado, agua no sobre la ventana y poco esfuerzo de pesca reciente.</td><td>Copernicus, lances</td></tr>
-          <tr><td>Evidencia de pesca</td><td>10</td><td>Hubo capturas cerca en los últimos días. Baja con mucho esfuerzo sin captura. Sin lances queda neutro.</td><td>CSV de lances</td></tr>
+          <tr><td>Evidencia de pesca</td><td>14</td><td>De los 50 lances históricos de la misma época del año (±2 meses) con condiciones más parecidas a las de hoy, un porcentaje alto tuvo jurel. Los lances recientes que cargues lo ajustan.</td><td>Lances 2020–2026 + CSV reciente</td></tr>
           <tr><td>Convergencia</td><td>8</td><td>Las corrientes superficiales convergen sobre la celda.</td><td>Copernicus</td></tr>
           <tr><td>Surgencia-relajación</td><td>8</td><td>Hubo un pulso de viento sur en los últimos 5 días y ahora afloja. Pesa más cerca de la costa.</td><td>Viento ECMWF</td></tr>
           <tr><td>Fondo y distancia</td><td>6</td><td>La celda está cerca de la distancia típica de pesca (25 mn por defecto, mediana de los lances con jurel 2020–2026).</td><td>Lances Orizon, batimetría ETOPO</td></tr>
@@ -617,7 +617,7 @@ const FACTORES = [
   { id: "alimento", n: "Alimento", w: 14, d: "Clorofila satelital como indicador de alimento: mejor en aguas moderadamente productivas (≈0,8 mg/m³) y en bordes de clorofila. Ni el agua oligotrófica ni el bloom costero son ideales." },
   { id: "frente", n: "Frente térmico", w: 12, d: "Gradiente de TSM en los alrededores. El jurel se junta en los bordes de masas de agua." },
   { id: "cohesion", n: "Cohesión", w: 10, d: "Lo inverso a la dispersión del cardumen. Bajan la cohesión: mar de viento local fuerte, capa de mezcla profunda, frentes débiles, agua más cálida que la ventana y mucho esfuerzo de pesca reciente." },
-  { id: "presion", n: "Evidencia de pesca", w: 10, d: "Lances de los últimos 10 días, con más peso los más recientes. Las capturas cercanas suben el factor. Mucho esfuerzo sin captura lo baja. Sin lances queda neutro." },
+  { id: "presion", n: "Evidencia de pesca", w: 14, d: "Compara con los lances históricos (2020–2026) de la misma época del año (±2 meses de la fecha, cualquier año; más peso a los más cercanos en fecha): de ellos toma los 50 cuyas condiciones (TSM, T 50 m, termoclina, capa de mezcla, clorofila, frente, relajación del viento y distancia a la costa) más se parecen a las de esta celda ese día, y mira qué porcentaje tuvo jurel. Sobre el promedio histórico sube el factor; bajo el promedio lo baja. Si además cargas lances de los últimos 10 días, las capturas cercanas lo suben y el esfuerzo sin captura lo baja." },
   { id: "convergencia", n: "Convergencia", w: 8, d: "Zonas donde las corrientes superficiales convergen y retienen plancton." },
   { id: "surgencia", n: "Surgencia-relajación", w: 8, d: "Pulso de viento sur que afloja en los días previos, con más efecto cerca de la costa." },
   { id: "fondo", n: "Fondo y distancia", w: 6, d: "Preferencia por la distancia a la costa donde la flota pesca jurel: por defecto 25 mn, la mediana de los lances con jurel 2020–2026 (la mitad entre 16 y 32 mn). Baja mucho más cerca o más lejos; las aguas profundas lejanas bajan un poco." },
@@ -895,6 +895,23 @@ async function descargarML(onProg) {
   });
   return { fechas: j.fechas, cells, generado: j.generado, modelo: j.modelo || {}, cal };
 }
+// analogos.json: para cada celda y día, de los 50 lances históricos con condiciones de mar más parecidas, % con jurel
+async function descargarAnalogos(onProg) {
+  onProg("Lances históricos análogos");
+  if (location.protocol === "file:") throw new Error("Abierto como archivo local: los análogos solo se cargan desde el link de GitHub Pages.");
+  const r = await fetch("analogos.json?t=" + Date.now(), { cache: "no-store" });
+  if (!r.ok) { const e = new Error("Aún no se publican: se generan en la próxima corrida de «Actualizar perfiles Copernicus»."); e.sinModelo = true; throw e; }
+  const j = await r.json();
+  const LA = [...new Set(j.puntos.map(p => p.lat))].sort((a, b) => a - b);
+  const LO = [...new Set(j.puntos.map(p => p.lon))].sort((a, b) => a - b);
+  const m = new Map(j.puntos.map(p => [p.lat + "," + p.lon, p.a]));
+  const cells = G.cells.map(c => {
+    const a = vecino(LA, c.lat), b = vecino(LO, c.lon);
+    const s = (a.d <= 0.25 && b.d <= 0.25) ? m.get(LA[a.i] + "," + LO[b.i]) : null;
+    return j.fechas.map((f, t) => (s && s[t]) ? s[t] : null);
+  });
+  return { fechas: j.fechas, cells, generado: j.generado, k: j.k, lances: j.lances, base: j.base };
+}
 function renderSugerenciaML() {
   const el = document.getElementById("mlSug");
   const cal = DATA && DATA.ml && DATA.ml.cal, sg = cal && cal.sugerencias;
@@ -1041,6 +1058,12 @@ async function descargarTodo(onProg) {
     marca("ml", "Modelo ML · entrenado con lances de la flota", diasEntre(ml.generado.slice(0, 10), hoyLocal()) <= 2, ml.fechas[ml.fechas.length - 1],
       `${md.lances || "?"} lances, AUC ${isNum(md.auc_validacion) ? md.auc_validacion.toFixed(2) : "?"} con validación por año · predicción del ${ml.generado.slice(0, 10)}`);
   } catch (e) { marca("ml", "Modelo ML · entrenado con lances de la flota", e.sinModelo ? null : false, "", e.message); }
+  let ana = null;
+  try {
+    ana = await descargarAnalogos(onProg);
+    marca("ana", "Lances históricos análogos · condiciones parecidas", diasEntre(ana.generado.slice(0, 10), hoyLocal()) <= 2, ana.fechas[ana.fechas.length - 1],
+      `${ana.k} lances más parecidos de ${ana.lances} (2020–2026), misma época ±2 meses; éxito histórico promedio ${ana.base}%`);
+  } catch (e) { marca("ana", "Lances históricos análogos · condiciones parecidas", e.sinModelo ? null : false, "", e.message); }
   let chl = null;
   try {
     chl = await descargarChl(onProg);
@@ -1051,7 +1074,7 @@ async function descargarTodo(onProg) {
   let bati = null;
   try { bati = await descargarBati(onProg); marca("bati", "Batimetría · ETOPO (ERDDAP)", true, "fija"); }
   catch (e) { marca("bati", "Batimetría · ETOPO (ERDDAP)", false, "", e.message + ". Se usa solo la distancia a la costa."); }
-  return { fetched: new Date().toISOString(), n: G.cells.length, marino, viento, rtofs, chl, bati, ml, fuentes };
+  return { fetched: new Date().toISOString(), n: G.cells.length, marino, viento, rtofs, chl, bati, ml, ana, fuentes };
 }
 
 // ================================================================== presión de pesca (lances del usuario)
@@ -1109,7 +1132,7 @@ function prefs() {
   for (const f of FACTORES) { const v = g("w_" + f.id); pesos[f.id] = isNum(v) && v >= 0 ? v : f.w; }
   return {
     tMin: isNum(g("tMin")) ? g("tMin") : 13, tMax: isNum(g("tMax")) ? g("tMax") : 15.5,
-    nino: isNum(g("nino")) ? g("nino") : 0, red: isNum(g("red")) ? g("red") : 120, distTip: g("distTip") > 0 ? g("distTip") : 25, wML: isNum(g("wML")) ? clamp(g("wML"), 0, 100) : 50,
+    nino: isNum(g("nino")) ? g("nino") : 0, red: isNum(g("red")) ? g("red") : 120, distTip: g("distTip") > 0 ? g("distTip") : 25, wML: isNum(g("wML")) ? clamp(g("wML"), 0, 100) : 30,
     port: document.getElementById("port").value || "Coronel", pesos
   };
 }
@@ -1242,12 +1265,15 @@ function calcularDia(data, di, lances) {
     const hv = histEn(c, fecha), historial = isNum(hv) ? 0.3 + 0.7 * hv : NEUTRO;
     // 6. evidencia de pesca y 5. cohesión / dispersión
     const pres = presionEn(c.lat, c.lon, lances, fRefLances);
-    let presion = NEUTRO, presDisp = 0;
+    // base: lances históricos análogos (condiciones de mar parecidas a las de esta celda y día)
+    const tan = data.ana ? data.ana.fechas.indexOf(fecha) : -1, an = tan >= 0 ? data.ana.cells[i][tan] : null;
+    const baseAna = an ? clamp(NEUTRO + 1.6 * (an[0] - data.ana.base) / 100 * (0.5 + 0.5 * an[2] / 100), 0.1, 1) : NEUTRO;
+    let presion = baseAna, presDisp = 0;
     if (pres && pres.E > 0.05) {
       const conf = clamp(pres.E / 2, 0, 1);
       const evid = clamp(0.35 + 0.65 * (1 - Math.exp(-pres.C / 80)), 0, 1);
       const agot = (1 - (isNum(pres.exito) ? pres.exito : 0)) * clamp(pres.E / 4, 0, 1);
-      presion = clamp(NEUTRO + conf * (evid - NEUTRO) - 0.3 * agot, 0.05, 1);
+      presion = clamp(baseAna + conf * (evid - baseAna) - 0.3 * agot, 0.05, 1);
       presDisp = clamp(pres.E3 / 6, 0, 1);
     }
     const partes = [];
@@ -1268,7 +1294,7 @@ function calcularDia(data, di, lances) {
     const score = isNum(pml) && p.wML > 0 ? Math.round((1 - p.wML / 100) * indiceExp + p.wML * pml) : indiceExp;
     const s3 = M.cells[i].sst[di3];
     return {
-      ...c, score, indiceExp, pml: isNum(pml) ? Math.round(pml * 100) : NaN, comp, sst: s, grad: gr, ola, olaV, chl, prof: isNum(prof) ? -prof : NaN,
+      ...c, score, indiceExp, pml: isNum(pml) ? Math.round(pml * 100) : NaN, pana: an ? an[0] : NaN, tana: an ? an[1] : NaN, sana: an ? an[2] : NaN, comp, sst: s, grad: gr, ola, olaV, chl, prof: isNum(prof) ? -prof : NaN,
       zt: pr ? pr.zt : NaN, mld: pr ? pr.mld : NaN, t50: pr ? pr.t50 : NaN, zCard, dispersion,
       conv: -div * 1e6, esfuerzo: pres ? pres.E : NaN, histv: isNum(hv) ? Math.round(hv * 100) : NaN, dsst: isNum(s) && isNum(s3) && di3 !== di ? s - s3 : NaN
     };
@@ -1387,6 +1413,7 @@ const CAPAS = [
   { id: "dispersion", n: "Dispersión", u: "0–1", lo: 0, hi: 1, ramp: "ola", f: v => v.toFixed(2) },
   { id: "esfuerzo", n: "Presión de pesca", u: "lances pond.", lo: 0, hi: 4, ramp: "ola", need: "lances", f: v => v.toFixed(1) },
   { id: "prof", n: "Fondo", u: "m", lo: 0, hi: 5000, ramp: "prof", need: "bati", f: v => Math.round(v) },
+  { id: "pana", n: "Lances análogos", u: "% con jurel", lo: 40, hi: 100, ramp: "idx", need: "ana", f: v => Math.round(v) },
   { id: "pml", n: "Modelo ML", u: "% de lances con jurel", lo: 0, hi: 100, ramp: "idx", need: "ml", f: v => Math.round(v) },
   { id: "histv", n: "Historial flota", u: "0–100", lo: 0, hi: 100, ramp: "idx", f: v => Math.round(v) },
   { id: "ola", n: "Olas máx", u: "m", lo: 0, hi: 6, ramp: "ola" }
@@ -1528,6 +1555,7 @@ function tooltip(hit) {
   tip.innerHTML = `<div class="mono" style="font-weight:600">${fmtPos(c.lat, c.lon)} · índice ${c.score}</div>
     <div>TSM <b>${f1(c.sst)}</b> °C · T50 <b>${f1(c.t50)}</b> · Chl <b>${isNum(c.chl) ? c.chl.toFixed(2) : "–"}</b></div>
     <div>Termoclina <b>${f0(c.zt)}</b> m · mezcla <b>${f0(c.mld)}</b> m · cardumen ≈ <b>${f0(c.zCard)}</b> m</div>
+    ${isNum(c.pana) ? `<div>Análogos: <b>${c.pana}%</b> de ${DATA.ana.k} lances parecidos (misma época) con jurel${c.pana > 0 ? ` · ${c.tana} t/lance` : ""}</div>` : ""}
     ${isNum(c.pml) ? `<div>Modelo ML <b>${c.pml}%</b> de lances con jurel · índice de factores <b>${c.indiceExp}</b></div>` : ""}
     <div>Fondo <b>${f0(c.prof)}</b> m · olas <b>${f1(c.ola)}</b> m <span class="chip ${op.k}">${op.t}</span></div>
     <div>${Math.round(distMn(pl, po, c.lat, c.lon))} mn, rumbo ${Math.round(rumbo(pl, po, c.lat, c.lon))}° desde ${p.port}</div>
@@ -1622,7 +1650,7 @@ function renderVeredicto(info) {
   document.getElementById("vTitle").textContent = `Lectura ${f === hoyLocal() ? "de hoy" : "del " + etiquetaDia(f)}`;
   const prof = isNum(t1.zCard) ? ` El cardumen estaría cerca de <b>${Math.round(t1.zCard)} m</b> (termoclina a ${f0(t1.zt)} m)${t1.zCard > p.red ? ", más hondo que el alcance de la red" : ""}.` : "";
   el.innerHTML = `<span class="note">Zona: ${etiquetaZona(zona())}</span><br>Mayor índice frente a <strong>${unirY(zonas)}</strong>. El mejor cuadrante es <span class="mono">${fmtPos(t1.lat, t1.lon)}</span>,
-    a ${Math.round(distMn(pl, po, t1.lat, t1.lon))} mn de ${p.port}, con índice ${t1.score} y TSM ${f1(t1.sst)} °C.${isNum(t1.pml) ? ` El modelo entrenado con los lances de la flota da <b>${t1.pml}%</b> de probabilidad de lance con jurel ahí.` : ""}${prof}
+    a ${Math.round(distMn(pl, po, t1.lat, t1.lon))} mn de ${p.port}, con índice ${t1.score} y TSM ${f1(t1.sst)} °C.${isNum(t1.pml) ? ` El modelo entrenado con los lances de la flota da <b>${t1.pml}%</b> de probabilidad de lance con jurel ahí.` : ""}${isNum(t1.pana) ? ` En la misma época del año y con condiciones parecidas, <b>${t1.pana}%</b> de los lances históricos tuvo jurel (promedio ${DATA.ana.base}%).` : ""}${prof}
     Su punto fuerte es <b>${fuerte[0].toLowerCase()}</b> (${Math.round(fuerte[1] * 100)}) y el débil, <b>${debil[0].toLowerCase()}</b> (${Math.round(debil[1] * 100)}).
     En la costa a ${isNum(v37.lat) ? -v37.lat : "–"}°S hay ${viento}. Mar: <span class="chip ${op.k}">${op.t}</span>
     ${info && info.mejor ? `<br>Mejor día de la semana para zarpar: <strong>${DATA.marino.fechas[info.mejor.di] === hoyLocal() ? "hoy" : etiquetaDia(DATA.marino.fechas[info.mejor.di])}</strong>.` : ""}
@@ -1836,7 +1864,11 @@ function fraseFactor(id, c, bueno) {
     case "alimento": return !isNum(c.chl) ? "clorofila sin dato" : bueno ? `alimento disponible (clorofila ${c.chl.toFixed(2)} mg/m³)` : `poco alimento o bloom costero (clorofila ${c.chl.toFixed(2)} mg/m³)`;
     case "frente": return bueno ? "frente térmico marcado en el área" : "sin frente térmico definido";
     case "cohesion": return bueno ? "condiciones para cardumen compacto" : "condiciones de dispersión del cardumen";
-    case "presion": return !isNum(c.esfuerzo) ? "sin lances recientes cargados" : bueno ? "capturas recientes en la cercanía" : "esfuerzo reciente con poca captura";
+    case "presion": {
+      const h = isNum(c.pana) ? `en esta época y con condiciones como estas, ${c.pana}% de los ${DATA.ana.k} lances históricos más parecidos tuvo jurel (promedio ${DATA.ana.base}%)` : "";
+      const r = !isNum(c.esfuerzo) ? "" : bueno ? "capturas recientes en la cercanía" : "esfuerzo reciente con poca captura";
+      return [h, r].filter(Boolean).join("; ") || "sin lances históricos ni recientes";
+    }
     case "convergencia": return bueno ? "corrientes que convergen y retienen plancton" : "corrientes divergentes";
     case "surgencia": return bueno ? "relajación después de un pulso de surgencia" : "sin pulso reciente de surgencia";
     case "fondo": return bueno ? "a la distancia de la costa donde suele pescar la flota" : "lejos de la distancia habitual de pesca de la flota";
@@ -1935,6 +1967,7 @@ async function analizarZona(lat, lon, nombre) {
     ${celdaHoy ? `<section class="card">
       <h2>Por qué la zona está así hoy</h2>
       <p>Mejor celda del área: <span class="mono">${fmtPos(celdaHoy.lat, celdaHoy.lon)}</span>, índice <b>${celdaHoy.score}</b> (${nivelIndice(celdaHoy.score)}). Promedio del área: ${dias[0]?.media ?? "–"}.</p>
+      ${isNum(celdaHoy.pana) ? `<p><b>Comparación histórica:</b> de los ${DATA.ana.k} lances de 2020–2026 de la misma época del año (±2 meses) con condiciones más parecidas a las de hoy en esa celda, <b>${celdaHoy.pana}%</b> tuvo jurel${celdaHoy.pana > 0 ? `, con ${celdaHoy.tana} t por lance en promedio` : ""} (promedio histórico ${DATA.ana.base}%; parecido ${celdaHoy.sana}/100).</p>` : ""}
       ${factoresHTML}
     </section>
     <section class="card">
