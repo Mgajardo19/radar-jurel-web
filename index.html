@@ -910,7 +910,7 @@ async function descargarAnalogos(onProg) {
     const s = (a.d <= 0.25 && b.d <= 0.25) ? m.get(LA[a.i] + "," + LO[b.i]) : null;
     return j.fechas.map((f, t) => (s && s[t]) ? s[t] : null);
   });
-  return { fechas: j.fechas, cells, generado: j.generado, k: j.k, lances: j.lances, base: j.base };
+  return { fechas: j.fechas, cells, generado: j.generado, k: j.k, lances: j.lances, base: j.base, baseEpoca: j.base_epoca || [] };
 }
 function renderSugerenciaML() {
   const el = document.getElementById("mlSug");
@@ -1062,7 +1062,7 @@ async function descargarTodo(onProg) {
   try {
     ana = await descargarAnalogos(onProg);
     marca("ana", "Lances históricos análogos · condiciones parecidas", diasEntre(ana.generado.slice(0, 10), hoyLocal()) <= 2, ana.fechas[ana.fechas.length - 1],
-      `${ana.k} lances más parecidos de ${ana.lances} (2020–2026), misma época ±2 meses; éxito histórico promedio ${ana.base}%`);
+      `${ana.k} lances más parecidos de ${ana.lances} (2020–2026), misma época ±2 meses; éxito promedio ${ana.base}% (en esta época ${isNum(ana.baseEpoca[0]) ? ana.baseEpoca[0] + "%" : "s/d"})`);
   } catch (e) { marca("ana", "Lances históricos análogos · condiciones parecidas", e.sinModelo ? null : false, "", e.message); }
   let chl = null;
   try {
@@ -1196,6 +1196,7 @@ function histEn(c, fecha) {
 }
 
 const lancesJurel = () => LANCES.filter(x => !x.e || x.e.includes("jurel"));
+const ANA_MIN_SIMIL = 15;     // parecido mínimo (0–100) para usar los lances análogos
 function calcularDia(data, di, lances) {
   lances = lances === LANCES ? lancesJurel() : lances;
   const p = prefs(), lo = p.tMin + p.nino, hi = p.tMax + p.nino;
@@ -1266,8 +1267,10 @@ function calcularDia(data, di, lances) {
     // 6. evidencia de pesca y 5. cohesión / dispersión
     const pres = presionEn(c.lat, c.lon, lances, fRefLances);
     // base: lances históricos análogos (condiciones de mar parecidas a las de esta celda y día)
-    const tan = data.ana ? data.ana.fechas.indexOf(fecha) : -1, an = tan >= 0 ? data.ana.cells[i][tan] : null;
-    const baseAna = an ? clamp(NEUTRO + 1.6 * (an[0] - data.ana.base) / 100 * (0.5 + 0.5 * an[2] / 100), 0.1, 1) : NEUTRO;
+    // si no hubo lances realmente parecidos (lejos de donde opera la flota) queda neutro
+    const tan = data.ana ? data.ana.fechas.indexOf(fecha) : -1, an0 = tan >= 0 ? data.ana.cells[i][tan] : null;
+    const an = an0 && an0[2] >= ANA_MIN_SIMIL ? an0 : null;
+    const baseAna = an ? clamp(NEUTRO + 1.6 * (an[0] - data.ana.base) / 100 * clamp((an[2] - ANA_MIN_SIMIL) / 30, 0.3, 1), 0.1, 1) : NEUTRO;
     let presion = baseAna, presDisp = 0;
     if (pres && pres.E > 0.05) {
       const conf = clamp(pres.E / 2, 0, 1);
@@ -1294,7 +1297,7 @@ function calcularDia(data, di, lances) {
     const score = isNum(pml) && p.wML > 0 ? Math.round((1 - p.wML / 100) * indiceExp + p.wML * pml) : indiceExp;
     const s3 = M.cells[i].sst[di3];
     return {
-      ...c, score, indiceExp, pml: isNum(pml) ? Math.round(pml * 100) : NaN, pana: an ? an[0] : NaN, tana: an ? an[1] : NaN, sana: an ? an[2] : NaN, comp, sst: s, grad: gr, ola, olaV, chl, prof: isNum(prof) ? -prof : NaN,
+      ...c, score, indiceExp, pml: isNum(pml) ? Math.round(pml * 100) : NaN, pana: an ? an[0] : NaN, tana: an ? an[1] : NaN, sana: an ? an[2] : NaN, bepoca: tan >= 0 && isNum(data.ana.baseEpoca[tan]) ? data.ana.baseEpoca[tan] : NaN, comp, sst: s, grad: gr, ola, olaV, chl, prof: isNum(prof) ? -prof : NaN,
       zt: pr ? pr.zt : NaN, mld: pr ? pr.mld : NaN, t50: pr ? pr.t50 : NaN, zCard, dispersion,
       conv: -div * 1e6, esfuerzo: pres ? pres.E : NaN, histv: isNum(hv) ? Math.round(hv * 100) : NaN, dsst: isNum(s) && isNum(s3) && di3 !== di ? s - s3 : NaN
     };
@@ -1650,7 +1653,7 @@ function renderVeredicto(info) {
   document.getElementById("vTitle").textContent = `Lectura ${f === hoyLocal() ? "de hoy" : "del " + etiquetaDia(f)}`;
   const prof = isNum(t1.zCard) ? ` El cardumen estaría cerca de <b>${Math.round(t1.zCard)} m</b> (termoclina a ${f0(t1.zt)} m)${t1.zCard > p.red ? ", más hondo que el alcance de la red" : ""}.` : "";
   el.innerHTML = `<span class="note">Zona: ${etiquetaZona(zona())}</span><br>Mayor índice frente a <strong>${unirY(zonas)}</strong>. El mejor cuadrante es <span class="mono">${fmtPos(t1.lat, t1.lon)}</span>,
-    a ${Math.round(distMn(pl, po, t1.lat, t1.lon))} mn de ${p.port}, con índice ${t1.score} y TSM ${f1(t1.sst)} °C.${isNum(t1.pml) ? ` El modelo entrenado con los lances de la flota da <b>${t1.pml}%</b> de probabilidad de lance con jurel ahí.` : ""}${isNum(t1.pana) ? ` En la misma época del año y con condiciones parecidas, <b>${t1.pana}%</b> de los lances históricos tuvo jurel (promedio ${DATA.ana.base}%).` : ""}${prof}
+    a ${Math.round(distMn(pl, po, t1.lat, t1.lon))} mn de ${p.port}, con índice ${t1.score} y TSM ${f1(t1.sst)} °C.${isNum(t1.pml) ? ` El modelo entrenado con los lances de la flota da <b>${t1.pml}%</b> de probabilidad de lance con jurel ahí.` : ""}${isNum(t1.pana) ? ` En la misma época del año y con condiciones parecidas, <b>${t1.pana}%</b> de los lances históricos tuvo jurel (en esta época el promedio fue ${isNum(t1.bepoca) ? t1.bepoca : DATA.ana.base}%).` : ""}${prof}
     Su punto fuerte es <b>${fuerte[0].toLowerCase()}</b> (${Math.round(fuerte[1] * 100)}) y el débil, <b>${debil[0].toLowerCase()}</b> (${Math.round(debil[1] * 100)}).
     En la costa a ${isNum(v37.lat) ? -v37.lat : "–"}°S hay ${viento}. Mar: <span class="chip ${op.k}">${op.t}</span>
     ${info && info.mejor ? `<br>Mejor día de la semana para zarpar: <strong>${DATA.marino.fechas[info.mejor.di] === hoyLocal() ? "hoy" : etiquetaDia(DATA.marino.fechas[info.mejor.di])}</strong>.` : ""}
@@ -1865,7 +1868,7 @@ function fraseFactor(id, c, bueno) {
     case "frente": return bueno ? "frente térmico marcado en el área" : "sin frente térmico definido";
     case "cohesion": return bueno ? "condiciones para cardumen compacto" : "condiciones de dispersión del cardumen";
     case "presion": {
-      const h = isNum(c.pana) ? `en esta época y con condiciones como estas, ${c.pana}% de los ${DATA.ana.k} lances históricos más parecidos tuvo jurel (promedio ${DATA.ana.base}%)` : "";
+      const h = isNum(c.pana) ? `en esta época y con condiciones como estas, ${c.pana}% de los ${DATA.ana.k} lances históricos más parecidos tuvo jurel (en esta época el promedio fue ${isNum(c.bepoca) ? c.bepoca : DATA.ana.base}%)` : "";
       const r = !isNum(c.esfuerzo) ? "" : bueno ? "capturas recientes en la cercanía" : "esfuerzo reciente con poca captura";
       return [h, r].filter(Boolean).join("; ") || "sin lances históricos ni recientes";
     }
@@ -1967,7 +1970,7 @@ async function analizarZona(lat, lon, nombre) {
     ${celdaHoy ? `<section class="card">
       <h2>Por qué la zona está así hoy</h2>
       <p>Mejor celda del área: <span class="mono">${fmtPos(celdaHoy.lat, celdaHoy.lon)}</span>, índice <b>${celdaHoy.score}</b> (${nivelIndice(celdaHoy.score)}). Promedio del área: ${dias[0]?.media ?? "–"}.</p>
-      ${isNum(celdaHoy.pana) ? `<p><b>Comparación histórica:</b> de los ${DATA.ana.k} lances de 2020–2026 de la misma época del año (±2 meses) con condiciones más parecidas a las de hoy en esa celda, <b>${celdaHoy.pana}%</b> tuvo jurel${celdaHoy.pana > 0 ? `, con ${celdaHoy.tana} t por lance en promedio` : ""} (promedio histórico ${DATA.ana.base}%; parecido ${celdaHoy.sana}/100).</p>` : ""}
+      ${isNum(celdaHoy.pana) ? `<p><b>Comparación histórica:</b> de los ${DATA.ana.k} lances de 2020–2026 de la misma época del año (±2 meses) con condiciones más parecidas a las de hoy en esa celda, <b>${celdaHoy.pana}%</b> tuvo jurel${celdaHoy.pana > 0 ? `, con ${celdaHoy.tana} t por lance en promedio` : ""} (en esta época el promedio fue ${isNum(celdaHoy.bepoca) ? celdaHoy.bepoca : DATA.ana.base}%; parecido ${celdaHoy.sana}/100).</p>` : ""}
       ${factoresHTML}
     </section>
     <section class="card">
