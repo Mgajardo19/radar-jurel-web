@@ -1270,7 +1270,8 @@ function calcularDia(data, di, lances) {
     // si no hubo lances realmente parecidos (lejos de donde opera la flota) queda neutro
     const tan = data.ana ? data.ana.fechas.indexOf(fecha) : -1, an0 = tan >= 0 ? data.ana.cells[i][tan] : null;
     const an = an0 && an0[2] >= ANA_MIN_SIMIL ? an0 : null;
-    const baseAna = an ? clamp(NEUTRO + 1.6 * (an[0] - data.ana.base) / 100 * clamp((an[2] - ANA_MIN_SIMIL) / 30, 0.3, 1), 0.1, 1) : NEUTRO;
+    const refAna = tan >= 0 && isNum(data.ana.baseEpoca[tan]) ? data.ana.baseEpoca[tan] : data.ana.base;   // promedio de la época
+    const baseAna = an ? clamp(NEUTRO + 2.0 * (an[0] - refAna) / 100 * clamp((an[2] - ANA_MIN_SIMIL) / 30, 0.3, 1), 0.1, 1) : NEUTRO;
     let presion = baseAna, presDisp = 0;
     if (pres && pres.E > 0.05) {
       const conf = clamp(pres.E / 2, 0, 1);
