@@ -122,6 +122,9 @@ canvas#map { width: 100%; display: block; border-radius: 6px; touch-action: mani
 .tip .comps { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 6px; margin-top: 6px; align-items: center; }
 .tip .comps i { display: block; height: 5px; background: var(--accent); border-radius: 2px; }
 .tip .comps span { color: var(--muted); }
+.vcomps { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 10px; align-items: center; font-size: 13px; max-width: 460px; }
+.vcomps i { display: block; height: 6px; background: var(--accent); border-radius: 2px; }
+.vcomps span { color: var(--muted); }
 .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
 
 .verdict { font-size: 15px; line-height: 1.5; }
@@ -239,6 +242,7 @@ pre.csv { background: var(--paper); border: 1px solid var(--line); border-radius
     <button class="tab" role="tab" id="tabRadar" aria-controls="vistaRadar" aria-selected="true" type="button">Radar</button>
     <button class="tab" role="tab" id="tabPel" aria-controls="vistaPel" aria-selected="false" type="button">Sardina y Anchoveta</button>
     <button class="tab" role="tab" id="tabZona" aria-controls="vistaZona" aria-selected="false" type="button">Consulta de zona</button>
+    <button class="tab" role="tab" id="tabVer" aria-controls="vistaVer" aria-selected="false" type="button">Verificación</button>
     <button class="tab" role="tab" id="tabGlos" aria-controls="vistaGlos" aria-selected="false" type="button">Glosario y guía</button>
   </nav>
 
@@ -449,6 +453,27 @@ pre.csv { background: var(--paper); border: 1px solid var(--line); border-radius
       <p class="note" style="margin-top:8px">Elige un lugar de la costa y cuántas millas mar adentro, o escribe coordenadas (grados decimales o grados y minutos). También puedes tocar una celda en el mapa del Radar y presionar «Analizar celda seleccionada». Las condiciones de ahora y de las próximas 72 h se consultan al momento para ese punto exacto.</p>
     </section>
     <div class="vista" id="qResultado"></div>
+  </div>
+
+  <div class="vista" id="vistaVer" role="tabpanel" aria-labelledby="tabVer" hidden>
+    <section class="card">
+      <h2>Verificación: qué dijo el radar</h2>
+      <div class="ctrl">
+        <label for="vFecha">Fecha del lance<select id="vFecha"><option value="">Cargando…</option></select></label>
+        <label for="vLat">Latitud (°S)<input type="text" id="vLat" placeholder="37°30' o -37.5" autocomplete="off"></label>
+        <label for="vLon">Longitud (°W)<input type="text" id="vLon" placeholder="74°20' o -74.33" autocomplete="off"></label>
+        <label for="vCap">Jurel capturado (t)<input type="number" id="vCap" min="0" step="1" placeholder="opcional"></label>
+        <button class="btn" id="btnVer" type="button">Comparar</button>
+      </div>
+      <p class="note" style="margin-top:8px">Cada mañana, al actualizarse (06:17), se guarda una foto de lo que recomendaba el radar en cada cuadrante: índice de ese día y de los 7 siguientes, factores, modelo ML y lances análogos, con los ajustes por defecto. Aquí eliges el día y la posición donde caló la flota y ves qué decía el radar ese día y con 1 a 3 días de anticipación. Lo que escribes aquí no se guarda ni se publica.</p>
+    </section>
+    <div class="vista" id="vResultado"></div>
+    <section class="card">
+      <h2>Acierto del radar con tus lances</h2>
+      <p>Cruza los lances cargados en Radar → Presión de pesca (quedan solo en este navegador) con la foto del radar de cada día: si cuando marcaba alto la flota pescó más.</p>
+      <button class="btn" id="btnVerLances" type="button">Calcular con los lances cargados</button>
+      <div id="vLances" style="margin-top:10px"></div>
+    </section>
   </div>
 
   <div class="vista guia" id="vistaGlos" role="tabpanel" aria-labelledby="tabGlos" hidden>
@@ -1988,6 +2013,124 @@ async function analizarZona(lat, lon, nombre) {
     </section>`;
   out.querySelector("section")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
+
+// ================================================================== verificación (fotos diarias del radar)
+const FOTOS = new Map();
+let FOTO_FECHAS = null;
+async function fechasFotos() {
+  if (FOTO_FECHAS) return FOTO_FECHAS;
+  if (location.protocol === "file:") throw new Error("Abierto como archivo local: el historial solo se lee desde el link de GitHub Pages.");
+  const r = await fetch("historial/indice.json?t=" + Date.now(), { cache: "no-store" });
+  FOTO_FECHAS = r.ok ? ((await r.json()).fechas || []) : [];
+  return FOTO_FECHAS;
+}
+async function fotoDe(f) {
+  if (FOTOS.has(f)) return FOTOS.get(f);
+  const r = await fetch(`historial/${f}.json`, { cache: "no-store" });
+  const j = r.ok ? await r.json() : null;
+  FOTOS.set(f, j); return j;
+}
+function celdaFotoEn(F, lat, lon) {
+  let best = null, bd = 1e9;
+  for (const c of F.celdas) { const d = distMn(lat, lon, c[0], c[1]); if (d < bd) { bd = d; best = c; } }
+  return { c: best, d: bd };
+}
+const sumarDias = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+const nombreFactor = id => (FACTORES.find(f => f.id === id) || { n: id }).n;
+async function abrirVer() {
+  const sel = document.getElementById("vFecha");
+  try {
+    const fs = await fechasFotos();
+    if (!fs.length) { sel.innerHTML = `<option value="">Aún no hay fotos</option>`; document.getElementById("vResultado").innerHTML = `<section class="card"><p>Todavía no hay fotos guardadas. La primera se genera en la próxima actualización diaria (06:17) o al correr «Actualizar perfiles Copernicus».</p></section>`; return; }
+    const prev = sel.value;
+    sel.innerHTML = fs.slice().reverse().map(f => `<option value="${f}">${f === hoyLocal() ? "Hoy" : etiquetaDia(f)} · ${f}</option>`).join("");
+    if (prev && fs.includes(prev)) sel.value = prev;
+  } catch (e) { sel.innerHTML = `<option value="">Sin historial</option>`; document.getElementById("vResultado").innerHTML = `<section class="card"><p class="err">${e.message}</p></section>`; }
+}
+async function compararVer() {
+  const out = document.getElementById("vResultado"), f = document.getElementById("vFecha").value;
+  const lat = parseCoord(document.getElementById("vLat").value), lon = parseCoord(document.getElementById("vLon").value);
+  const capS = document.getElementById("vCap").value, cap = capS === "" ? NaN : parseFloat(capS);
+  if (!f) { out.innerHTML = `<section class="card"><p>Elige una fecha con foto guardada.</p></section>`; return; }
+  if (!isNum(lat) || !isNum(lon)) { out.innerHTML = `<section class="card"><p class="err">Escribe la latitud y longitud del lance.</p></section>`; return; }
+  out.innerHTML = `<section class="card"><p>Leyendo la foto del ${f}…</p></section>`;
+  const F = await fotoDe(f);
+  if (!F) { out.innerHTML = `<section class="card"><p class="err">No se pudo leer la foto del ${f}.</p></section>`; return; }
+  const { c, d } = celdaFotoEn(F, lat, lon);
+  if (!c || d > 25) { out.innerHTML = `<section class="card"><p class="err">El punto queda a ${Math.round(d)} mn del cuadrante más cercano del radar: revisa las coordenadas (deben estar en el mar, entre 26° y 44°S).</p></section>`; return; }
+  const score = c[2][0];
+  // ranking entre los cuadrantes a menos de 100 mn del lance
+  const cerca = F.celdas.filter(x => isNum(x[2][0]) && distMn(lat, lon, x[0], x[1]) <= 100).sort((a, b) => b[2][0] - a[2][0]);
+  const puesto = cerca.findIndex(x => x === c) + 1;
+  const pct = cerca.length ? Math.round(100 * (cerca.length - puesto) / Math.max(1, cerca.length - 1)) : NaN;
+  const top = cerca.slice(0, 5);
+  // lo que decían las fotos de días anteriores para esta fecha
+  const antes = [];
+  for (let k = 1; k <= 3; k++) {
+    const fa = sumarDias(f, -k), Fa = (await fechasFotos()).includes(fa) ? await fotoDe(fa) : null;
+    if (!Fa) { antes.push({ k, v: null }); continue; }
+    const t = Fa.fechas.indexOf(f), ca = celdaFotoEn(Fa, lat, lon).c;
+    antes.push({ k, v: t >= 0 && ca ? ca[2][t] : null });
+  }
+  let veredicto = "";
+  if (isNum(cap)) {
+    const alto = score >= 70, bajo = score < 50;
+    veredicto = cap > 0 ? (alto ? `<span class="chip g">Acierto</span> El radar marcaba ${score} y hubo ${Math.round(cap)} t de jurel.`
+                                : bajo ? `<span class="chip b">El radar lo subestimó</span> Marcaba ${score} y hubo ${Math.round(cap)} t de jurel. Conviene revisar qué factor bajó el índice.`
+                                       : `<span class="chip w">Intermedio</span> Marcaba ${score} (regular) y hubo ${Math.round(cap)} t de jurel.`)
+                      : (alto ? `<span class="chip b">Falsa alarma</span> El radar marcaba ${score} y no hubo jurel.`
+                              : bajo ? `<span class="chip g">Acierto</span> El radar marcaba ${score} (zona poco favorable) y no hubo jurel.`
+                                     : `<span class="chip w">Intermedio</span> Marcaba ${score} y no hubo jurel.`);
+  }
+  const tile = (l, v, s2) => `<div class="tile"><span class="l">${l}</span><span class="v">${v}</span>${s2 ? `<span class="s">${s2}</span>` : ""}</div>`;
+  const facs = F.factores.map((id, i) => ({ n: nombreFactor(id), v: c[3][i] })).sort((a, b) => b.v - a.v);
+  out.innerHTML = `<section class="card">
+      <h2>${f === hoyLocal() ? "Hoy" : etiquetaDia(f)} · ${fmtPos(lat, lon)}</h2>
+      ${veredicto ? `<p style="font-size:15px">${veredicto}</p>` : ""}
+      <div class="tiles">
+        ${tile("Índice ese día", `${score}`, nivelIndice(score))}
+        ${tile("Puesto en el área", isNum(pct) ? `${puesto} de ${cerca.length}` : "–", isNum(pct) ? `mejor que el ${pct}% a menos de 100 mn` : "")}
+        ${tile("Modelo ML", isNum(c[4]) ? `${c[4]}%` : "–", "prob. de lance con jurel")}
+        ${tile("Lances análogos", isNum(c[5]) ? `${c[5]}%` : "–", "con jurel en condiciones parecidas")}
+        ${tile("TSM", `${f1(c[6])} °C`, `termoclina ${f0(c[7])} m`)}
+        ${tile("Olas", `${f1(c[8])} m`, operable(c[8]).t)}
+      </div>
+      <p class="note" style="margin-top:6px">Cuadrante del radar a ${Math.round(d)} mn del punto (${fmtPos(c[0], c[1])}). Foto tomada el ${F.generado.slice(0, 16).replace("T", " ")} UTC.</p>
+      <h3>Lo que anticipaba el radar para este día</h3>
+      <ul class="ventanas">${antes.map(a => `<li>Con ${a.k} día${a.k > 1 ? "s" : ""} de anticipación: <b>${a.v ?? "sin foto"}</b></li>`).join("")}<li>El mismo día: <b>${score}</b></li></ul>
+      <h3>Factores ese día</h3>
+      <div class="vcomps">${facs.map(x => `<span>${x.n}</span><i style="width:${x.v}%"></i><b>${x.v}</b>`).join("")}</div>
+      <h3>Lo que recomendaba en la cercanía (100 mn)</h3>
+      <div class="tablewrap"><table>
+        <thead><tr><th>#</th><th>Cuadrante</th><th>Índice</th><th>Desde tu lance</th><th>ML</th><th>Análogos</th></tr></thead>
+        <tbody>${top.map((x, i) => `<tr${x === c ? ' class="activa"' : ""}><td>${i + 1}</td><td class="mono">${fmtPos(x[0], x[1])}</td><td class="mono"><b>${x[2][0]}</b></td><td class="mono">${Math.round(distMn(lat, lon, x[0], x[1]))} mn, ${Math.round(rumbo(lat, lon, x[0], x[1]))}°</td><td class="mono">${isNum(x[4]) ? x[4] + "%" : "–"}</td><td class="mono">${isNum(x[5]) ? x[5] + "%" : "–"}</td></tr>`).join("")}</tbody>
+      </table></div>
+      ${puesto > 5 ? `<p class="note">Tu cuadrante quedó en el puesto ${puesto}.</p>` : ""}
+    </section>`;
+}
+async function verificarLances() {
+  const el = document.getElementById("vLances"), L = lancesJurel();
+  if (!L.length) { el.innerHTML = `<p>No hay lances cargados. Súbelos en Radar → Presión de pesca (CSV con fecha, lat, lon, captura_t).</p>`; return; }
+  const fs = new Set(await fechasFotos());
+  const usar = L.filter(x => fs.has(x.f));
+  if (!usar.length) { el.innerHTML = `<p>Ninguno de los ${L.length} lances cargados cae en un día con foto del radar (las fotos parten el ${[...fs][0] || "próximo día"}).</p>`; return; }
+  const bandas = [[85, 101, "85 o más"], [70, 85, "70 a 84"], [50, 70, "50 a 69"], [0, 50, "bajo 50"]].map(b => ({ b, n: 0, pos: 0, t: 0 }));
+  let n = 0;
+  for (const x of usar) {
+    const F = await fotoDe(x.f); if (!F) continue;
+    const { c, d } = celdaFotoEn(F, x.la, x.lo); if (!c || d > 25 || !isNum(c[2][0])) continue;
+    const g = bandas.find(z => c[2][0] >= z.b[0] && c[2][0] < z.b[1]); g.n++; n++; if (x.c > 0) { g.pos++; g.t += x.c; }
+  }
+  el.innerHTML = `<div class="tablewrap"><table>
+      <thead><tr><th>Índice del radar ese día</th><th>Lances</th><th>Con jurel</th><th>t promedio por lance</th></tr></thead>
+      <tbody>${bandas.map(z => `<tr><td>${z.b[2]}</td><td class="mono">${z.n}</td><td class="mono">${z.n ? Math.round(100 * z.pos / z.n) + "%" : "–"}</td><td class="mono">${z.n ? Math.round(z.t / z.n) : "–"}</td></tr>`).join("")}</tbody>
+    </table></div><p class="note">${n} lances cruzados con la foto del radar de su día. Si el radar sirve, el % con jurel y las toneladas deberían subir de abajo hacia arriba en la tabla. Con pocos lances por fila la comparación todavía no es concluyente.</p>`;
+}
+function initVer() {
+  document.getElementById("btnVer").addEventListener("click", compararVer);
+  document.getElementById("btnVerLances").addEventListener("click", verificarLances);
+  document.getElementById("vFecha").addEventListener("change", () => { if (document.getElementById("vLat").value) compararVer(); });
+}
 function initConsulta() {
   const sel = document.getElementById("qLugar");
   for (const [n] of LUGARES) { const o = document.createElement("option"); o.value = n; o.textContent = n; sel.appendChild(o); }
@@ -2456,7 +2599,7 @@ function initPel() {
   for (const id of ["zN", "zS", "zDmin", "zDmax", "zPort"]) document.getElementById(id).addEventListener("change", () => { guardarZona(); SEL = null; tamMapa(); actualizarVista(); });
   renderPresets(); renderZonas();
   // pestañas
-  const tabs = [["tabRadar", "vistaRadar"], ["tabPel", "vistaPel"], ["tabZona", "vistaZona"], ["tabGlos", "vistaGlos"]];
+  const tabs = [["tabRadar", "vistaRadar"], ["tabPel", "vistaPel"], ["tabZona", "vistaZona"], ["tabVer", "vistaVer"], ["tabGlos", "vistaGlos"]];
   const mostrarTab = id => {
     for (const [t, v] of tabs) {
       const on = t === id;
@@ -2466,13 +2609,15 @@ function initPel() {
     store.set("radarJurel.v2.tab", id);
     if (id === "tabRadar") { tamMapa(); dibujar(); }
     if (id === "tabPel" && window.abrirPel) window.abrirPel();
+    if (id === "tabVer") abrirVer();
   };
   window.mostrarTab = mostrarTab;
   for (const [t] of tabs) document.getElementById(t).addEventListener("click", () => mostrarTab(t));
   const tabGuardada = store.get("radarJurel.v2.tab");
   initConsulta();
   initPel();
-  if (tabGuardada === "tabGlos" || tabGuardada === "tabZona" || tabGuardada === "tabPel") mostrarTab(tabGuardada);
+  initVer();
+  if (["tabGlos", "tabZona", "tabPel", "tabVer"].includes(tabGuardada)) mostrarTab(tabGuardada);
   // buscador del glosario
   document.getElementById("glBuscar").addEventListener("input", ev => {
     const q = ev.target.value.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
