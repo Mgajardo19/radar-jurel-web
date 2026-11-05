@@ -125,6 +125,12 @@ canvas#map { width: 100%; display: block; border-radius: 6px; touch-action: mani
 .vcomps { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 10px; align-items: center; font-size: 13px; max-width: 460px; }
 .vcomps i { display: block; height: 6px; background: var(--accent); border-radius: 2px; }
 .vcomps span { color: var(--muted); }
+.vmapas { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.vmapa { margin: 0; }
+.vmapa figcaption { font-size: 12.5px; color: var(--muted); margin-bottom: 4px; font-weight: 600; }
+.vmapa svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 6px; }
+.vley { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin-top: 4px; }
+.vley div { display: flex; } .vley div span { width: 26px; height: 9px; }
 .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
 
 .verdict { font-size: 15px; line-height: 1.5; }
@@ -2065,12 +2071,13 @@ async function compararVer() {
   const pct = cerca.length ? Math.round(100 * (cerca.length - puesto) / Math.max(1, cerca.length - 1)) : NaN;
   const top = cerca.slice(0, 5);
   // lo que decían las fotos de días anteriores para esta fecha
-  const antes = [];
+  const antes = [], mapas = [{ t: "El mismo día", F, i: 0 }];
   for (let k = 1; k <= 3; k++) {
     const fa = sumarDias(f, -k), Fa = (await fechasFotos()).includes(fa) ? await fotoDe(fa) : null;
     if (!Fa) { antes.push({ k, v: null }); continue; }
     const t = Fa.fechas.indexOf(f), ca = celdaFotoEn(Fa, lat, lon).c;
     antes.push({ k, v: t >= 0 && ca ? ca[2][t] : null });
+    if (t >= 0) mapas.push({ t: `Pronóstico de ${k} día${k > 1 ? "s" : ""} antes (${etiquetaDia(fa)})`, F: Fa, i: t });
   }
   let veredicto = "";
   if (isNum(cap)) {
@@ -2096,6 +2103,10 @@ async function compararVer() {
         ${tile("Olas", `${f1(c[8])} m`, operable(c[8]).t)}
       </div>
       <p class="note" style="margin-top:6px">Cuadrante del radar a ${Math.round(d)} mn del punto (${fmtPos(c[0], c[1])}). Foto tomada el ${F.generado.slice(0, 16).replace("T", " ")} UTC.</p>
+      <h3>Mapa: lo que sugería el radar</h3>
+      ${(() => { const R = rangoVer(mapas, lat, lon); return `<div class="vmapas">${mapas.map(m => mapaVer(m.F, m.i, lat, lon, cap, m.t, R)).join("")}</div>`; })()}
+      ${leyendaVer(rangoVer(mapas, lat, lon))}
+      <p class="note">Colores = índice del radar para el ${etiquetaDia(f)}, con la escala ajustada al rango del área para que se note qué destacaba (azul = lo más bajo del área, rojo = lo más alto). ✕ = tu lance. Círculos 1–5 = los cuadrantes que el radar recomendaba en ese momento dentro de 100 mn. Si el ✕ cae sobre colores cálidos o cerca de un círculo, el radar lo anticipaba.</p>
       <h3>Lo que anticipaba el radar para este día</h3>
       <ul class="ventanas">${antes.map(a => `<li>Con ${a.k} día${a.k > 1 ? "s" : ""} de anticipación: <b>${a.v ?? "sin foto"}</b></li>`).join("")}<li>El mismo día: <b>${score}</b></li></ul>
       <h3>Factores ese día</h3>
@@ -2107,6 +2118,49 @@ async function compararVer() {
       </table></div>
       ${puesto > 5 ? `<p class="note">Tu cuadrante quedó en el puesto ${puesto}.</p>` : ""}
     </section>`;
+}
+
+// mapa pequeño de la foto del radar alrededor de un lance (SVG)
+function ventanaVer(lat, lon) { return { N: lat + 1.3, S: lat - 1.3, W: lon - 1.9, E: Math.max(lon + 1.0, coastLonJS(lat) + 0.5) }; }
+function rangoVer(mapas, lat, lon) {
+  const { N, S, W, E } = ventanaVer(lat, lon), v = [];
+  for (const m of mapas) for (const c of m.F.celdas) if (isNum(c[2][m.i]) && c[0] <= N && c[0] >= S && c[1] >= W && c[1] <= E) v.push(c[2][m.i]);
+  if (!v.length) return [40, 95];
+  let lo = Math.min(...v), hi = Math.max(...v);
+  if (hi - lo < 10) { const m = (hi + lo) / 2; lo = m - 5; hi = m + 5; }
+  return [lo, hi];
+}
+function mapaVer(F, i, lat, lon, cap, titulo, R = [40, 95]) {
+  const { N, S, W, E } = ventanaVer(lat, lon);
+  const kx = Math.cos(lat * D2R), Wd = 420, Hd = Math.round(Wd * (N - S) / ((E - W) * kx));
+  const X = lo => (lo - W) / (E - W) * Wd, Y = la => (N - la) / (N - S) * Hd;
+  const paso = GRID.step, cel = [];
+  for (const c of F.celdas) {
+    const v = c[2][i];
+    if (!isNum(v) || c[0] > N + paso || c[0] < S - paso || c[1] < W - paso || c[1] > E + paso) continue;
+    cel.push(`<rect x="${X(c[1] - paso / 2).toFixed(1)}" y="${Y(c[0] + paso / 2).toFixed(1)}" width="${(paso / (E - W) * Wd + 0.6).toFixed(1)}" height="${(paso / (N - S) * Hd + 0.6).toFixed(1)}" fill="${colorRamp("idx", (v - R[0]) / (R[1] - R[0]))}"><title>${fmtPos(c[0], c[1])} · índice ${v}</title></rect>`);
+  }
+  const costa = COSTA.filter(([a]) => a <= N + 1 && a >= S - 1).map(([a, o]) => `${X(o).toFixed(1)},${Y(a).toFixed(1)}`);
+  const tierra = costa.length ? `<polygon points="${costa.join(" ")} ${Wd + 5},${Y(S - 1).toFixed(1)} ${Wd + 5},${Y(N + 1).toFixed(1)}" fill="var(--land)" stroke="var(--coast)" stroke-width="1"/>` : "";
+  const top = F.celdas.filter(x => isNum(x[2][i]) && distMn(lat, lon, x[0], x[1]) <= 100).sort((a, b) => b[2][i] - a[2][i]).slice(0, 5);
+  const marcas = top.map((x, k) => `<g><circle cx="${X(x[1]).toFixed(1)}" cy="${Y(x[0]).toFixed(1)}" r="9" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="${X(x[1]).toFixed(1)}" y="${(Y(x[0]) + 4).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="700" fill="#111">${k + 1}</text></g>`).join("");
+  const puertos = Object.entries(PUERTOS).filter(([, [a, o]]) => a <= N && a >= S && o >= W && o <= E)
+    .map(([n, [a, o]]) => `<circle cx="${X(o).toFixed(1)}" cy="${Y(a).toFixed(1)}" r="3" fill="var(--ink)"/><text x="${(X(o) + 5).toFixed(1)}" y="${(Y(a) + 4).toFixed(1)}" font-size="11" fill="var(--ink)">${n}</text>`).join("");
+  const cx = X(lon), cy = Y(lat), sc = mejorDe(F, i, lat, lon);
+  const lance = `<g stroke="#000" stroke-width="5" stroke-linecap="round"><line x1="${cx - 8}" y1="${cy - 8}" x2="${cx + 8}" y2="${cy + 8}"/><line x1="${cx - 8}" y1="${cy + 8}" x2="${cx + 8}" y2="${cy - 8}"/></g>
+    <g stroke="#fff" stroke-width="2.2" stroke-linecap="round"><line x1="${cx - 8}" y1="${cy - 8}" x2="${cx + 8}" y2="${cy + 8}"/><line x1="${cx - 8}" y1="${cy + 8}" x2="${cx + 8}" y2="${cy - 8}"/></g>
+    <text x="${cx + 12}" y="${cy - 10}" font-size="12" font-weight="700" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">${isNum(cap) ? Math.round(cap) + " t" : "lance"}${isNum(sc) ? " · " + sc : ""}</text>`;
+  return `<figure class="vmapa"><figcaption>${titulo}</figcaption>
+    <svg viewBox="0 0 ${Wd} ${Hd}" role="img" aria-label="${titulo}: índice del radar alrededor del lance"><rect width="${Wd}" height="${Hd}" fill="var(--sea)"/>${cel.join("")}${tierra}${puertos}${marcas}${lance}</svg></figure>`;
+}
+function mejorDe(F, i, lat, lon) { const c = celdaFotoEn(F, lat, lon).c; return c ? c[2][i] : NaN; }
+function coastLonJS(lat) {
+  for (let k = 0; k < COSTA.length - 1; k++) { const [a1, o1] = COSTA[k], [a2, o2] = COSTA[k + 1]; if (a2 <= lat && lat <= a1) return o1 + (o2 - o1) * (lat - a1) / (a2 - a1); }
+  return lat > COSTA[0][0] ? COSTA[0][1] : COSTA[COSTA.length - 1][1];
+}
+function leyendaVer(R) {
+  const st = [0, 0.2, 0.4, 0.6, 0.8, 1].map(t => `<span style="background:${colorRamp("idx", t)}"></span>`).join("");
+  return `<div class="vley"><span class="mono">${Math.round(R[0])}</span><div>${st}</div><span class="mono">${Math.round(R[1])}</span> índice en el área</div>`;
 }
 async function verificarLances() {
   const el = document.getElementById("vLances"), L = lancesJurel();
