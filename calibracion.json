@@ -1,5 +1,5 @@
 {
- "entrenado": "2026-11-03T13:55Z",
+ "entrenado": "2026-11-05T16:25Z",
  "algoritmo": "XGBoost",
  "lances": 3960,
  "con_jurel": 3111,
@@ -93,6 +93,29 @@
   "relax",
   "norte72"
  ],
+ "comparacion": {
+  "base": {
+   "variables": 14,
+   "auc": 0.601
+  },
+  "ampliado": {
+   "variables": 24,
+   "auc": 0.601,
+   "extra": [
+    "so0",
+    "so50",
+    "zos",
+    "bottomT",
+    "o2_0",
+    "o2_100",
+    "zox",
+    "no3",
+    "zooc",
+    "luna"
+   ]
+  },
+  "elegido": "base"
+ },
  "sugerencias": {
   "tsm_min": 11.99,
   "tsm_max": 16.32,
